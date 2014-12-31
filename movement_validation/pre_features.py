@@ -20,13 +20,15 @@ class MinimalWormSpecification(object):
         worm_frame_iterator: Iterator of instances of Worm
         
         """
-        attribute_list = ['contour', 'head', 'tail', 'segmentation_status', 
-                          'frame_codes', 'vulva_side']
-
-        for attribute in attribute_list:
-            setattr(self, attribute) = \
-                np.array([getattr(frame, attribute) for 
-                          frame in worm_frame_list])
+        
+        
+#        attribute_list = ['contour', 'head', 'tail', 'segmentation_status', 
+#                          'frame_codes', 'vulva_side']
+#
+#        for attribute in attribute_list:
+#            setattr(self, attribute) = \
+#                np.array([getattr(frame, attribute) for 
+#                          frame in worm_frame_list])
 
 
     def pre_features(self):
