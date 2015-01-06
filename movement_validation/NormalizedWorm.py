@@ -30,17 +30,21 @@ class NormalizedWorm(object):
     * first column is original name
     * second column is renamed name, if renamed.
 
-    Properties:
+    Attributes:
     -----------
       segmentation_status   
       frame_codes
       vulva_contours        49 x 2 x n_frames
       non_vulva_contours    49 x 2 x n_frames
-      skeletons
-      angles
-      in_out_touches
-      lengths
-      widths
+      skeletons : numpy.array
+          - (49,2,n_frames)
+      angles : numpy.array
+          - (49,n_frames)
+      in_out_touches ????? 49 x n_frames
+      lengths : numpy.array
+          - (nframes,)
+      widths : numpy.array
+          - (49,n_frames)
       head_areas
       tail_areas
       vulva_areas
@@ -78,16 +82,45 @@ class NormalizedWorm(object):
   SI = seg_worm.skeleton_indices;
 
   """
+    
+
+    
     # The normalized worm contains precisely 49 points per frame.  Here
     # we list in a dictionary various partitions of the worm.
-    worm_partitions = None
+    # These are RANGE values, so the last value is not inclusive
+    worm_partitions = {'head': (0, 8),
+                       'neck': (8, 16),
+                       'midbody':  (16, 33),
+                       'old_midbody_velocity': (20, 29),
+                       'hips':  (33, 41),
+                       'tail': (41, 49),
+                       # refinements of ['head']
+                       'head_tip': (0, 4),
+                       'head_base': (4, 8),    # ""
+                       # refinements of ['tail']
+                       'tail_base': (40, 45),
+                       'tail_tip': (45, 49),   # ""
+                       'all': (0, 49),
+                       # neck, midbody, and hips
+                       'body': (8, 41)}
+
     # this stores a dictionary of various ways of organizing the partitions
-    worm_parititon_subsets = None
+    worm_partition_subsets = {'normal': ('head', 'neck', 'midbody', 'hips', 'tail'),
+                                   'first_third': ('head', 'neck'),
+                                   'second_third': ('midbody',),
+                                   'last_third': ('hips', 'tail'),
+                                   'all': ('all',)}    
+    
+    
+    
+    
+    
+    
 
     data_dict = None  # A dictionary of all data in norm_obj.mat
 
 
-    def __init__(self, data_file_path=None):
+    def __init__(self):
         """ 
         Initialize this instance by loading both the worm data
         
@@ -97,49 +130,10 @@ class NormalizedWorm(object):
           if None is specified, no data is loaded      
 
         """
-        #TODO: Michael, why are these optional????
-        if data_file_path:
-            self.load_normalized_data(data_file_path)
-
-
-        # These are RANGE values, so the last value is not inclusive
-        self.worm_partitions = {'head': (0, 8),
-                                'neck': (8, 16),
-                                'midbody':  (16, 33),
-                                'old_midbody_velocity': (20, 29),
-                                'hips':  (33, 41),
-                                'tail': (41, 49),
-                                # refinements of ['head']
-                                'head_tip': (0, 4),
-                                'head_base': (4, 8),    # ""
-                                # refinements of ['tail']
-                                'tail_base': (40, 45),
-                                'tail_tip': (45, 49),   # ""
-                                'all': (0, 49),
-                                # neck, midbody, and hips
-                                'body': (8, 41)}
-
-        self.worm_partition_subsets = {'normal': ('head', 'neck', 'midbody', 'hips', 'tail'),
-                                       'first_third': ('head', 'neck'),
-                                       'second_third': ('midbody',),
-                                       'last_third': ('hips', 'tail'),
-                                       'all': ('all',)}
-
-        # DEBUG: (Note from @MichaelCurrie:)
-        # This should be set by the normalized worm file, since each
-        # worm subjected to an experiment is manually examined to find the
-        # vulva so the ventral mode can be determined.  Here we just set
-        # the ventral mode to a default value as a stopgap measure
-        self.ventral_mode = config.DEFAULT_VENTRAL_MODE
-
+        pass
 
     @classmethod
-    def load_from_matlab_data(self):
-        pass
-        #TODO: Merge the constructor and load_normalized_data into here...
-
-
-    def load_normalized_data(self, data_file_path):
+    def load_matlab_data(cls, data_file_path):
         """ 
         Load the norm_obj.mat file into this class
 
@@ -148,6 +142,16 @@ class NormalizedWorm(object):
         Translated from getObject in SegwormMatlabClasses
 
         """
+        
+        self = cls.__new__(cls)         
+        
+        # DEBUG: (Note from @MichaelCurrie:)
+        # This should be set by the normalized worm file, since each
+        # worm subjected to an experiment is manually examined to find the
+        # vulva so the ventral mode can be determined.  Here we just set
+        # the ventral mode to a default value as a stopgap measure
+        self.ventral_mode = config.DEFAULT_VENTRAL_MODE          
+        
 
         if(not os.path.isfile(data_file_path)):
             raise Exception("Data file not found: " + data_file_path)
@@ -173,13 +177,6 @@ class NormalizedWorm(object):
             # NOTE: These are aligned to the order in the files.
             # these will be the keys of the dictionary data_dict
             data_keys = [
-                # this just contains a string for where to find the
-                # eigenworm file.  we do not use this, however, since
-                # the eigenworm postures are universal to all worm files,
-                # so the file is just stored in the /features directory
-                # of the source code, and is loaded at the features 
-                # calculation step
-                'EIGENWORM_PATH',
                 # a string of length n, showing, for each frame of the video:
                 # s = segmented
                 # f = segmentation failed
@@ -205,17 +202,10 @@ class NormalizedWorm(object):
                 'x',                  # shape is (49, n) integer
                 'y']                  # shape is (49, n) integer
 
-            # Here I use powerful python syntax to reference data elements of s
-            # dynamically through built-in method getattr
-            # that is, getattr(s, x)  works syntactically just like s.x,
-            # only x is a variable, so we can do a list comprehension with it!
-            # this is to build up a nice dictionary containing the data in s
             
             for key in data_keys:
                 setattr(self, key, getattr(staging_data, key))
             
-            #self.data_dict = {x: getattr(staging_data, x) for x in data_keys}
-
             # Let's change the string of length n to a numpy array of single
             # characters of length n, to be consistent with the other data
             # structures
@@ -223,6 +213,7 @@ class NormalizedWorm(object):
 
             self.load_frame_code_descriptions()
 
+        return self
 
     def load_frame_code_descriptions(self):
         """

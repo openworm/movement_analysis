@@ -290,7 +290,7 @@ def print_object(obj):
             run_extra_code = True
             
         if run_extra_code:
-            #For some reason 
+            #TODO: Change length to shape if available
             if type(value) is list and len(value) > max_value_length:
                 len_value = len(value)
                 temp_str = 'Type::List, Len %d'%len_value

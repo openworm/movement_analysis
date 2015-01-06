@@ -44,7 +44,7 @@ def main():
     # OPENWORM
     #----------------------
     # Load the normalized worm from file
-    nw = NormalizedWorm(data_file_path)
+    nw = NormalizedWorm.load_matlab_data(data_file_path)
 
     #The frame rate is somewhere in the video info. Ideally this would all come
     #from the video parser eventually
@@ -75,6 +75,7 @@ def main():
     print("Path: " +
         str(matlab_worm_features.path == openworm_features.path))
 
+    print("Done validating features")
 
 if __name__ == '__main__':
     main()
