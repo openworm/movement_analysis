@@ -11,22 +11,48 @@ import scipy.ndimage.filters as filters
 import numpy as np
 import warnings
 import os, inspect, h5py
-import collections
 
 # http://www.lfd.uci.edu/~gohlke/pythonlibs/#shapely
 from shapely.geometry.polygon import Polygon
 from shapely.geometry import Point
 
+from . import feature_comparisons as fc
+
 from .. import utils
-from .. import config
 
 from . import events
 
 class Skeleton(object):
     def __init__(self,features_ref):
-        pass
-        #TODO: Implement this
         
+        nw  = features_ref.nw         
+        
+        self.x = nw.skeleton_x
+        self.y = nw.skeleton_y
+        
+        
+    @classmethod
+    def from_disk(cls, skeleton_ref):
+
+        self = cls.__new__(cls)      
+        
+        x_temp = utils._extract_time_from_disk(skeleton_ref,'x',is_matrix=True)
+        y_temp = utils._extract_time_from_disk(skeleton_ref,'y',is_matrix=True)
+        self.x = x_temp.transpose()
+        self.y = y_temp.transpose()
+        
+        return self
+     
+    def __repr__(self):
+        return utils.print_object(self) 
+    
+    
+    def __eq__(self, other):
+
+        eq_skeleton_x = fc.corr_value_high(np.ravel(self.x), np.ravel(other.x), 'posture.skeleton.x')
+        eq_skeleton_y = fc.corr_value_high(np.ravel(self.y), np.ravel(other.y), 'posture.skeleton.y')
+
+        return eq_skeleton_x and eq_skeleton_y
 
 class Bends(object):
 
@@ -45,10 +71,11 @@ class Bends(object):
     """
     def __init__(self, features_ref):
 
-        # TODO: I don't like this being in normalized worm
+        
 
         nw  = features_ref.nw
 
+        # TODO: I don't like this being in normalized worm
         p = nw.get_partition_subset('normal')
 
         for partition_key in p.keys():

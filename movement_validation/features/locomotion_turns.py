@@ -34,13 +34,6 @@ Formerly this code was contained in four Matlab files:
     seg_worm.feature_helpers.locomotion.getUpsilonEvents
     seg_worm.feature_helpers.locomotion.getTurnEventsFromSignedFrames
 
-
-TODO: OmegaTurns and UpsilonTurns should inherit from LocomotionTurns or something
-
-
-IMPORTANT: My events use 1 based indexing, the old code used 0 based
-indexing - @JimHokanson
-
 """
 
 import numpy as np
@@ -61,8 +54,8 @@ class LocomotionTurns(object):
 
     Attributes
     ----------    
-    omegas : OmegaTurns
-    upsilons : UpsilonTurns
+    omegas : .events.EventListWithFeatures
+    upsilons : .events.EventListWithFeatures
 
     Methods
     -------

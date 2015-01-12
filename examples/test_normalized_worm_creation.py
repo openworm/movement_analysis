@@ -34,9 +34,14 @@ def main():
     
 
     example_input_data = ExampleInput(base_path)
+    eid = example_input_data
     
-    nw = NormalizedWorm(data_file_path)
+    
+    #nw = NormalizedWorm.load_matlab_data(data_file_path)
 
+    nw2 = NormalizedWorm(eid.all_skeletons,eid.all_vulva_contours,
+                         eid.all_non_vulva_contours,eid.is_valid)
+    
     import pdb
     pdb.set_trace()
     

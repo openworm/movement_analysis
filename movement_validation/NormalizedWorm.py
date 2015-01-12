@@ -26,10 +26,6 @@ class NormalizedWorm(object):
     code from normWorms and to have a well described set of properties
     for rewriting the feature code.
 
-    PROPERTIES / METHODS FROM JIM'S MATLAB CODE:
-    * first column is original name
-    * second column is renamed name, if renamed.
-
     Attributes:
     -----------
       segmentation_status   
@@ -61,29 +57,6 @@ class NormalizedWorm(object):
       getObject              load_normalized_data(self, data_path)
 
     """
-
-
-    """
-
-    Notes
-    ----------------------
-    Originally translated from seg_worm.skeleton_indices
-  
-  Used in: (list is not comprehensive)
-  --------------------------------------------------------
-  - posture bends
-  - posture directions
-  
-  NOTE: These are hardcoded for now. I didn't find much use in trying
-  to make this dynamic based on some maximum value.
-  
-  Typical Usage:
-  --------------------------------------------------------
-  SI = seg_worm.skeleton_indices;
-
-  """
-    
-
     
     # The normalized worm contains precisely 49 points per frame.  Here
     # we list in a dictionary various partitions of the worm.
@@ -106,31 +79,57 @@ class NormalizedWorm(object):
 
     # this stores a dictionary of various ways of organizing the partitions
     worm_partition_subsets = {'normal': ('head', 'neck', 'midbody', 'hips', 'tail'),
-                                   'first_third': ('head', 'neck'),
-                                   'second_third': ('midbody',),
-                                   'last_third': ('hips', 'tail'),
-                                   'all': ('all',)}    
-    
-    
-    
-    
-    
-    
+                             'first_third': ('head', 'neck'),
+                             'second_third': ('midbody',),
+                             'last_third': ('hips', 'tail'),
+                             'all': ('all',)}    
 
-    data_dict = None  # A dictionary of all data in norm_obj.mat
-
-
-    def __init__(self):
+    def __init__(self,skeletons,vulva_contours,non_vulva_contours,is_valid):
         """ 
         Initialize this instance by loading both the worm data
         
         Parameters
         ---------------------------------------
         data_file_path: string  (optional)
-          if None is specified, no data is loaded      
+          if None is specified, no data is loaded     
+        skeletons : 
 
         """
+        
+        
+        
+        #Things to compute
+        #------------------
+        #Normalize things first and then compute or compute then normalize???
+        #
+        #
+        #
+        #1) Lengths
+        #2) Normalized skeleton
+        #3) areas
+        #4) Normalized contours
+        #5) widths
+        
+        norm_skeletons = []
+            
+        
+        import pdb
+        pdb.set_trace()
         pass
+    
+    def _normalizeParameter(self,non_normalized_data):
+        """
+        
+        Parameters:
+        -----------
+        non_normalizied_data :
+            - ()
+        """
+        #Used for downsampling everything
+        #https://github.com/openworm/SegWorm/blob/master/ComputerVision/chainCodeLengthInterp.m        
+        pass
+    
+        
 
     @classmethod
     def load_matlab_data(cls, data_file_path):

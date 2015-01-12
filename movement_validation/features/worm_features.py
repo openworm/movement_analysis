@@ -106,6 +106,10 @@ class WormMorphology(object):
         self.width = morphology_features.Widths(features_ref)
 
         #TODO: This should eventually be calculated from the contour and skeleton
+        #
+        #This work is currently ongoing in the constructor for NormalizedWorm
+        #
+        #Eventually those methods will probably move to here ...
         self.area = nw.tail_areas + \
             nw.head_areas + \
             nw.vulva_areas + \
@@ -241,7 +245,9 @@ class WormLocomotion(object):
             print('Mismatch in locomotion.foraging events')
             same_locomotion = False
 
-        #TODO: Make eq in events be an error - use test_equality instead        
+        #TODO: Make eq in events be an error - use test_equality instead    
+        #NOTE: turns is a container class that implements eq, and is not
+        #an EventList    
         if not (self.turns == other.turns):
             print('Mismatch in locomotion.turns events')
             same_locomotion = False
@@ -345,8 +351,7 @@ class WormPosture(object):
         self.directions = posture_features.Directions(features_ref)
 
         #TODO: I'd rather this be a formal class
-        nt = collections.namedtuple('skeleton', ['x', 'y'])
-        self.skeleton = nt(nw.skeleton_x, nw.skeleton_y)
+        self.skeleton = posture_features.Skeleton(features_ref)
 
         self.eigen_projection = posture_features.get_eigenworms(features_ref)
 
@@ -375,11 +380,8 @@ class WormPosture(object):
         self.directions = posture_features.Directions.from_disk(p_var['directions'])
 
         # TODO: Add contours
-        skeleton = p_var['skeleton']
-        nt = collections.namedtuple('skeleton', ['x', 'y'])
-        x_temp = utils._extract_time_from_disk(skeleton,'x',is_matrix=True)
-        y_temp = utils._extract_time_from_disk(skeleton,'y',is_matrix=True)
-        self.skeleton = nt(x_temp.transpose(), y_temp.transpose())
+
+        self.skeleton = posture_features.Skeleton.from_disk(p_var['skeleton'])
         
         temp_eigen_projection = utils._extract_time_from_disk(p_var,'eigenProjection',is_matrix=True)        
         
@@ -412,8 +414,7 @@ class WormPosture(object):
         eq_primary_wavelength = fc.corr_value_high(self.primary_wavelength,other.primary_wavelength,'posture.primary_wavelength')
         eq_secondary_wavelength = fc.corr_value_high(self.secondary_wavelength, other.secondary_wavelength, 'posture.secondary_wavelength')
         eq_amplitude_max = fc.corr_value_high(self.amplitude_max, other.amplitude_max, 'posture.amplitude_max')        
-        eq_skeleton_x = fc.corr_value_high(np.ravel(self.skeleton.x), np.ravel(other.skeleton.x), 'posture.skeleton.x')
-        eq_skeleton_y = fc.corr_value_high(np.ravel(self.skeleton.y), np.ravel(other.skeleton.y), 'posture.skeleton.y')
+        eq_skeleton = self.skeleton == other.skeleton
         eq_coils = self.coils.test_equality(other.coils,'posture.coils')        
         eq_eigen_projection = fc.corr_value_high(np.ravel(self.eigen_projection), np.ravel(other.eigen_projection), 'posture.eigen_projection')
         
@@ -425,8 +426,7 @@ class WormPosture(object):
             eq_primary_wavelength and \
             eq_secondary_wavelength and \
             eq_amplitude_max and \
-            eq_skeleton_x and \
-            eq_skeleton_y and \
+            eq_skeleton and \
             eq_eigen_projection and \
             eq_coils
 
