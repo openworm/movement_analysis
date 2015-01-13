@@ -30,7 +30,6 @@ class Skeleton(object):
         self.x = nw.skeleton_x
         self.y = nw.skeleton_y
         
-        
     @classmethod
     def from_disk(cls, skeleton_ref):
 
@@ -69,16 +68,18 @@ class Bends(object):
     neck : BendSection
     
     """
+
+    posture_bend_keys = ['head','midbody','tail','hips','neck']    
+    
     def __init__(self, features_ref):
 
-        
 
         nw  = features_ref.nw
 
         # TODO: I don't like this being in normalized worm
-        p = nw.get_partition_subset('normal')
+        #p = nw.get_partition_subset('normal')
 
-        for partition_key in p.keys():
+        for partition_key in self.posture_bend_keys:
 
             # retrieve the part of the worm we are currently looking at:
             bend_angles = nw.get_partition(partition_key, 'angles')
@@ -97,7 +98,7 @@ class Bends(object):
 
                 
 
-            setattr(self, partition_key, BendSection(temp_mean, temp_std))
+            setattr(self, partition_key, BendSection(temp_mean, temp_std, partition_key))
 
     @classmethod
     def create(self,features_ref):
@@ -110,14 +111,24 @@ class Bends(object):
     def __repr__(self):
         return utils.print_object(self)
 
+
+    def __eq__(self, other):
+        same_values = True
+        for partition_key in self.posture_bend_keys:
+            same_values = same_values and (getattr(self,partition_key) == getattr(other,partition_key))
+            
+        return same_values    
+
+
     @classmethod
     def from_disk(cls, saved_bend_data):
 
         self = cls.__new__(cls)
 
-        for partition_key in saved_bend_data.keys():
+        #for partition_key in saved_bend_data.keys():
+        for partition_key in self.posture_bend_keys:    
             setattr(self, partition_key, BendSection.from_disk(
-                saved_bend_data[partition_key]))
+                saved_bend_data[partition_key],partition_key))
 
         return self
 
@@ -133,32 +144,40 @@ class BendSection(object):
     Bends
     
     """
-    def __init__(self, mean, std_dev):
+    def __init__(self, mean, std_dev, name):
         self.mean = mean
         self.std_dev = std_dev
+        self.name = name
 
     @classmethod
-    def from_disk(cls, saved_bend_data):
+    def from_disk(cls, saved_bend_data, name):
 
         self = cls.__new__(cls)
 
-        self.mean = saved_bend_data['mean'].value
-        self.std_dev = saved_bend_data['stdDev'].value
+        self.mean = utils._extract_time_from_disk(saved_bend_data, 'mean')
+
+        try:        
+            self.std_dev = utils._extract_time_from_disk(saved_bend_data, 'std_dev')
+        except KeyError:
+            self.std_dev = utils._extract_time_from_disk(saved_bend_data, 'stdDev')
+
+        self.name = name
 
         return self
 
     def __repr__(self):
         return utils.print_object(self)
 
-    """
-        TODO: Finish this    
     
     def __eq__(self, other):
-        return fc.corr_value_high(self.speed,other.speed,
-                                  'locomotion.velocity.' + self.name + '.speed') and \
-               fc.corr_value_high(self.direction,other.direction,
-                                  'locomotion.velocity.' + self.name + '.direction')
-    """
+        #TODO: Why is the head.std_dev so low???
+        #Are we not mimicing some old error properly???
+        return fc.corr_value_high(self.mean,other.mean,
+                                  'posture.bends.' + self.name + '.mean',
+                                  high_corr_value=0.99) and \
+               fc.corr_value_high(self.std_dev,other.std_dev,
+                                  'posture.bends.' + self.name + '.std_dev')
+
 
 def get_eccentricity_and_orientation(features_ref):
     """
@@ -1229,6 +1248,8 @@ class Directions(object):
 
     """
 
+    direction_keys = ['tail2head', 'head', 'tail']
+
     def __init__(self, features_ref):
         """
 
@@ -1247,9 +1268,6 @@ class Directions(object):
         sy = nw.y
         wp = nw.worm_partitions
                                                       
-        # These are the names of the final fields
-        NAMES = ['tail2head', 'head', 'tail']
-
         # For each set of indices, compute the centroids of the tip and tail then
         # compute a direction vector between them (tip - tail)
 
@@ -1260,14 +1278,14 @@ class Directions(object):
         TIP_S = [slice(*x) for x in TIP_I]  # S - slice
         TAIL_S = [slice(*x) for x in TAIL_I]
 
-        for iVector in range(3):
+        for iVector, attribute_name in enumerate(self.direction_keys):
             tip_x = np.mean(sx[TIP_S[iVector], :], axis=0)
             tip_y = np.mean(sy[TIP_S[iVector], :], axis=0)
             tail_x = np.mean(sx[TAIL_S[iVector], :], axis=0)
             tail_y = np.mean(sy[TAIL_S[iVector], :], axis=0)
 
             dir_value = 180 / np.pi * np.arctan2(tip_y - tail_y, tip_x - tail_x)
-            setattr(self, NAMES[iVector], dir_value)
+            setattr(self, attribute_name, dir_value)
 
         timer.toc('posture.directions')
 
@@ -1277,14 +1295,27 @@ class Directions(object):
 
         self = cls.__new__(cls)
 
-        for key in data:
-            setattr(self, key, data[key].value)
+        for key in self.direction_keys:            
+            temp_value = utils._extract_time_from_disk(data, key)
+            setattr(self, key, temp_value)
 
         return self
 
     def __repr__(self):
         return utils.print_object(self)
 
+    def __eq__(self, other):
+        
+        same_values = True
+        for partition_key in self.direction_keys:
+            value1 = getattr(self,partition_key)
+            value2 = getattr(self,partition_key)
+            same_values = same_values and \
+                fc.corr_value_high(value1, value2, 
+                                   'posture.directions.' + partition_key,
+                                   high_corr_value=0.99)
+            
+        return same_values    
 
 def load_eigen_worms():
     """ 

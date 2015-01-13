@@ -394,11 +394,6 @@ class WormPosture(object):
 
     def __eq__(self, other):
 
-        # TODO: 
-        # Missing:
-        # directions
-        # bend
-
         #TODO: It would be nice to see all failures before returning false
         #We might want to make a comparison class that handles these details 
         #and then prints the results
@@ -407,18 +402,39 @@ class WormPosture(object):
         #allows any failures to be printed, which at this point is useful for 
         #getting the code to align
 
-        eq_eccentricity = fc.corr_value_high(self.eccentricity, other.eccentricity, 'posture.eccentricity',high_corr_value=0.99)
-        eq_amplitude_ratio = fc.corr_value_high(self.amplitude_ratio, other.amplitude_ratio, 'posture.amplitude_ratio',high_corr_value=0.985) 
+
+        eq_bends = self.bends == other.bends
+        eq_amplitude_max = fc.corr_value_high(self.amplitude_max, other.amplitude_max, 'posture.amplitude_max')    
+        eq_amplitude_ratio = fc.corr_value_high(self.amplitude_ratio, other.amplitude_ratio, 'posture.amplitude_ratio',high_corr_value=0.985)
+        
+        eq_primary_wavelength = fc.corr_value_high(self.primary_wavelength,
+                                                   other.primary_wavelength,
+                                                   'posture.primary_wavelength',
+                                                   merge_nans=True,
+                                                   high_corr_value=0.97)   
+                                                   
+        eq_secondary_wavelength = fc.corr_value_high(self.secondary_wavelength,
+                                                     other.secondary_wavelength,
+                                                     'posture.secondary_wavelength',
+                                                     merge_nans=True,
+                                                     high_corr_value=0.985)
+        
+        
+        #TODO: We need a more lazy evaluation for these since they don't match
+        #Are they even close?
+        #We could provide a switch for exactly equal vs mimicing the old setup
+        #in which our goal could be to shoot for close
         eq_track_length = fc.corr_value_high(self.track_length, other.track_length, 'posture.track_length')
+        eq_eccentricity = fc.corr_value_high(self.eccentricity, other.eccentricity, 'posture.eccentricity',high_corr_value=0.99)
         eq_kinks = fc.corr_value_high(self.kinks, other.kinks, 'posture.kinks')
-        eq_primary_wavelength = fc.corr_value_high(self.primary_wavelength,other.primary_wavelength,'posture.primary_wavelength')
-        eq_secondary_wavelength = fc.corr_value_high(self.secondary_wavelength, other.secondary_wavelength, 'posture.secondary_wavelength')
-        eq_amplitude_max = fc.corr_value_high(self.amplitude_max, other.amplitude_max, 'posture.amplitude_max')        
+        
+        eq_coils = self.coils.test_equality(other.coils,'posture.coils')       
+        eq_directions = self.directions == other.directions
         eq_skeleton = self.skeleton == other.skeleton
-        eq_coils = self.coils.test_equality(other.coils,'posture.coils')        
         eq_eigen_projection = fc.corr_value_high(np.ravel(self.eigen_projection), np.ravel(other.eigen_projection), 'posture.eigen_projection')
         
         return \
+            eq_bends and \
             eq_eccentricity and \
             eq_amplitude_ratio and \
             eq_track_length and \
@@ -427,9 +443,10 @@ class WormPosture(object):
             eq_secondary_wavelength and \
             eq_amplitude_max and \
             eq_skeleton and \
-            eq_eigen_projection and \
-            eq_coils
-
+            eq_coils and \
+            eq_directions and \
+            eq_eigen_projection
+            
 
 
 
