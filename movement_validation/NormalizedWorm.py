@@ -46,6 +46,8 @@ class NormalizedWorm(object):
       vulva_areas
       non_vulva_areas      
 
+    Derived Attributes:
+    -------------------
       n_frames
       x - how does this differ from skeleton_x???
       y
@@ -84,6 +86,8 @@ class NormalizedWorm(object):
                              'last_third': ('hips', 'tail'),
                              'all': ('all',)}    
 
+    N_POINTS_NORMALIZED = 49
+
     def __init__(self,skeletons,vulva_contours,non_vulva_contours,is_valid):
         """ 
         Initialize this instance by loading both the worm data
@@ -92,7 +96,8 @@ class NormalizedWorm(object):
         ---------------------------------------
         data_file_path: string  (optional)
           if None is specified, no data is loaded     
-        skeletons : 
+        skeletons : list
+            Each element is 2 x n
 
         """
         
@@ -110,14 +115,45 @@ class NormalizedWorm(object):
         #4) Normalized contours
         #5) widths
         
+        #TODO: Get skeleton from contour????        
+        
+        #For lengths, let's normalize the skeleton the compute the lengths ...
+        #
+        #        
+        
         norm_skeletons = []
+            
+        n_frames = len(skeletons)    
+        #1) Normalizing the skeleton
+        #---------------------------
+        norm_s_x = np.empty([self.N_POINTS_NORMALIZED,n_frames])
+        norm_s_y = np.empty([self.N_POINTS_NORMALIZED,n_frames])
+        for iFrame, frame_skeleton in enumerate(skeletons):
+            sx = frame_skeleton[0,:]
+            sy = frame_skeleton[1,:]
+            cc = self._computeChainCodeLengths(sx,sy)
+            norm_s_x[iFrame,:] = self._normalizeParameter(sx,cc)
+            norm_s_y[iFrame,:] = self._normalizeParameter(sy,cc)
+            
+            
+        #2) Compute the skeleton lengths
+        #-------------------------------
             
         
         import pdb
         pdb.set_trace()
+    
+    def _computeSkeletonLengths(self):
+        #From skeleton, compute chaincodelengths - cumulate distances
+        #TODO: This won't be needed
         pass
     
-    def _normalizeParameter(self,non_normalized_data):
+    def _computeChainCodeLengths(self,x_data,y_data):
+        import pdb    
+        pdb.set_trace()
+        pass
+    
+    def _normalizeParameter(self,orig_data,data_positions):
         """
         
         Parameters:
@@ -125,10 +161,35 @@ class NormalizedWorm(object):
         non_normalizied_data :
             - ()
         """
+        
+        import pdb        
+        pdb.set_trace()
+        
+        new_lengths = np.linspace(data_positions[0],data_positions[-1],self.N_POINTS_NORMALIZED)
+        
         #Used for downsampling everything
         #https://github.com/openworm/SegWorm/blob/master/ComputerVision/chainCodeLengthInterp.m        
         pass
     
+        #Old approach - Summarized
+        #--------------------------
+        #For each new length, find where it is in the old length
+        #Do a linear interpolation between the two points that the new point
+        #   lies between
+    
+        #New steps:
+        #----------
+        #1) Compute chain code lengths
+    
+    
+        #OLD VARIABLES
+        #lengths - desired lengths
+        #chainCodeLengths - distances     
+    
+    
+        #[interpData indices] = chainCodeLengthInterp(data, lengths, chainCodeLengths, varargin)    
+    
+        
         
 
     @classmethod
