@@ -223,7 +223,8 @@ class WormLocomotion(object):
         #   away from the equality operator to a function that returns
         #   an equality result
 
-        #NOTE: We'll test everything instead of short-circuiting
+        #The order here matches the order the properties are populated
+        #in the constructor
         same_locomotion = True
 
         if not (self.velocity == other.velocity):
@@ -402,7 +403,8 @@ class WormPosture(object):
         #allows any failures to be printed, which at this point is useful for 
         #getting the code to align
 
-
+        #Note that the order of these matches the order in which they are 
+        #populated in the constructor
         eq_bends = self.bends == other.bends
         eq_amplitude_max = fc.corr_value_high(self.amplitude_max, other.amplitude_max, 'posture.amplitude_max')    
         eq_amplitude_ratio = fc.corr_value_high(self.amplitude_ratio, other.amplitude_ratio, 'posture.amplitude_ratio',high_corr_value=0.985)
@@ -433,6 +435,8 @@ class WormPosture(object):
         eq_skeleton = self.skeleton == other.skeleton
         eq_eigen_projection = fc.corr_value_high(np.ravel(self.eigen_projection), np.ravel(other.eigen_projection), 'posture.eigen_projection')
         
+        
+        #TODO: Reorder these as they appear above
         return \
             eq_bends and \
             eq_eccentricity and \
