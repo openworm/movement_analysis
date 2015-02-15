@@ -15,6 +15,8 @@ import h5py
 from . import config
 from . import utils
 
+import time
+
 class NormalizedWorm(object):
     """ 
     NormalizedWorm encapsulates the normalized measures data, loaded
@@ -90,14 +92,14 @@ class NormalizedWorm(object):
 
     def __init__(self,skeletons,vulva_contours,non_vulva_contours,is_valid):
         """ 
-        Initialize this instance by loading both the worm data
+        Create an instance from skeleton and contour data
         
         Parameters
-        ---------------------------------------
-        data_file_path: string  (optional)
-          if None is specified, no data is loaded     
+        --------------------------------------- 
         skeletons : list
-            Each element is 2 x n
+            Each element in the list may be empty (bad frame) or be of size
+            2 x n, where n varies depending on the # of pixels the worm occupied
+            in the given frame
 
         """
         
@@ -121,40 +123,117 @@ class NormalizedWorm(object):
         #
         #        
         
-        norm_skeletons = []
+        
             
         n_frames = len(skeletons)    
         #1) Normalizing the skeleton
         #---------------------------
+        t = time.time()
+        #TODO: Look into full instead of fill
+        #TODO: replace with:
+        #x,y = normalizeAllFrames(skeletons)
         norm_s_x = np.empty([self.N_POINTS_NORMALIZED,n_frames])
+        norm_s_x.fill(np.NaN)
         norm_s_y = np.empty([self.N_POINTS_NORMALIZED,n_frames])
+        norm_s_y.fill(np.NaN)
         for iFrame, frame_skeleton in enumerate(skeletons):
-            sx = frame_skeleton[0,:]
-            sy = frame_skeleton[1,:]
-            cc = self._computeChainCodeLengths(sx,sy)
-            norm_s_x[iFrame,:] = self._normalizeParameter(sx,cc)
-            norm_s_y[iFrame,:] = self._normalizeParameter(sy,cc)
+            if len(frame_skeleton) is not 0:
+                sx = frame_skeleton[0,:]
+                sy = frame_skeleton[1,:]
+                cc = self._computeChainCodeLengths(sx,sy)
+                norm_s_x[:,iFrame] = self._normalizeParameter(sx,cc)
+                norm_s_y[:,iFrame] = self._normalizeParameter(sy,cc)
             
-            
+           
+        #1.59 seconds for old approach - without vectors
+        elapsed = time.time() - t
+        
+        self.skeletons = np.empty([self.N_POINTS_NORMALIZED,2,n_frames])      
+        self.skeletons[:,1,:] = norm_s_x
+        self.skeletons[:,2,:] = norm_s_y    
+        
+        
         #2) Compute the skeleton lengths
         #-------------------------------
+           
+           
+        #3) Contours
+        #-----------------------------
+        #We need to normalize the contours
+        for iFrame,vc,nvc in enumerate(zip(vulva_contours,non_vulva_contours)):
+            if len(vc) is not 0:            
+                vc_x = vc[0,:]
+                
+                
+        #TODO: Make local function for skeletons and contour
+            def normalizeAllFrames(self,prop_to_normalize):
+                #TODO: Fill this in                
+                
+                
+                pass
+            
+            
+        """
+        Final needed attributes:
+        ------------------------
+        #1) ??? segmentation_status   
+        #2) ??? frame_codes
+        #3) vulva_contours        49 x 2 x n_frames
+        #4) non_vulva_contours    49 x 2 x n_frames
+        #5) DONE skeletons : numpy.array
+          - (49,2,n_frames)
+      angles : numpy.array
+          - (49,n_frames)
+      in_out_touches ????? 49 x n_frames
+      lengths : numpy.array
+          - (nframes,)
+      widths : numpy.array
+          - (49,n_frames)
+      head_areas
+      tail_areas
+      vulva_areas
+      non_vulva_areas 
+        
+        
+        """
+            
             
         
         import pdb
         pdb.set_trace()
     
-    def _computeSkeletonLengths(self):
-        #From skeleton, compute chaincodelengths - cumulate distances
-        #TODO: This won't be needed
-        pass
-    
-    def _computeChainCodeLengths(self,x_data,y_data):
-        import pdb    
-        pdb.set_trace()
-        pass
-    
-    def _normalizeParameter(self,orig_data,data_positions):
+    def _computeChainCodeLengths(self,x,y):
         """
+        Calculate the distance between a set of points and then calculate
+        their cumulative distance from the first point.
+        
+        The first value returned has a value of 0 by definition.
+        """
+        
+        #TODO: Should handle empty set - remove adding 0 as first element        
+        
+        dx = np.diff(x)
+        dy = np.diff(y)
+        
+        distances = np.concatenate([np.array([0.0]), np.sqrt(dx**2 + dy**2)])
+        return np.cumsum(distances)
+    
+    def _normalizeParameter(self,orig_data,old_lengths):
+        """
+        
+        This function finds where all of the new points will be when evenly
+        sampled (in terms of chain code length) from the first to the last 
+        point in the old data.
+
+        These points are then related to the old points. If a new points is at
+        an old point, the old point data value is used. If it is between two
+        old points, then linear interpolation is used to determine the new value
+        based on the neighboring old values.
+
+        NOTE: For better or worse, this approach does not smooth the new data
+        
+        Old Code:
+        https://github.com/openworm/SegWorm/blob/master/ComputerVision/chainCodeLengthInterp.m  
         
         Parameters:
         -----------
@@ -162,35 +241,43 @@ class NormalizedWorm(object):
             - ()
         """
         
-        import pdb        
-        pdb.set_trace()
         
-        new_lengths = np.linspace(data_positions[0],data_positions[-1],self.N_POINTS_NORMALIZED)
+        #TODO: Might just replace all of this with an interpolation call
         
-        #Used for downsampling everything
-        #https://github.com/openworm/SegWorm/blob/master/ComputerVision/chainCodeLengthInterp.m        
-        pass
-    
-        #Old approach - Summarized
-        #--------------------------
-        #For each new length, find where it is in the old length
-        #Do a linear interpolation between the two points that the new point
-        #   lies between
-    
-        #New steps:
-        #----------
-        #1) Compute chain code lengths
-    
-    
-        #OLD VARIABLES
-        #lengths - desired lengths
-        #chainCodeLengths - distances     
-    
-    
-        #[interpData indices] = chainCodeLengthInterp(data, lengths, chainCodeLengths, varargin)    
-    
+        new_lengths = np.linspace(old_lengths[0],old_lengths[-1],self.N_POINTS_NORMALIZED)
         
+        #For each point, get the bordering points
+        #Sort, with old coming before new
+        I = np.argsort(np.concatenate([old_lengths, new_lengths]), kind='mergesort')
+        #Find new points, an old point will be to the left
+        new_I = utils.find(I >= len(old_lengths)) #indices 0 to n-1, look for >= not >
         
+        norm_data = np.empty_like(new_lengths)        
+        
+        #Can we do this without a loop (YES!)
+        #find those that are equal
+        #those that are not equal (at an old point) then do vector math        
+
+        for iSeg,cur_new_I in enumerate(new_I):
+            cur_left_I = I[cur_new_I-1]
+            cur_right_I = cur_left_I + 1
+            if iSeg == 0 or (iSeg == len(new_lengths) - 1) or (new_lengths[iSeg] == old_lengths[cur_left_I]):
+                norm_data[iSeg] = orig_data[cur_left_I]
+            else:
+                new_position = new_lengths[iSeg]
+                left_position = old_lengths[cur_left_I]
+                right_position = old_lengths[cur_right_I]                    
+                total_length = right_position - left_position
+                #NOTE: If we are really close to left, then we want mostly
+                #left, which means right_position - new_position will almost
+                #be equal to the total length, and left_pct will be close to 1
+                left_pct = (right_position - new_position)/total_length
+                right_pct = (new_position - left_position)/total_length
+                norm_data[iSeg] = left_pct*orig_data[cur_left_I] + right_pct*orig_data[cur_right_I]
+
+
+        return norm_data
+
 
     @classmethod
     def load_matlab_data(cls, data_file_path):
