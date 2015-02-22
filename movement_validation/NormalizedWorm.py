@@ -215,11 +215,90 @@ class NormalizedWorm(object):
                 edge_length = cc[-1]/12               
 
                 #for a given index, we want to find the index at which point
-                new_lengths = cc + edge_length
+
+                n_points = len(cc)
+                right_I = np.full([n_points],-1)
+                left_I = np.full([n_points],-1)
+                
+                #We want all vertices to be defined, and if we look starting
+                #at the left_I for a vertex, rather than vertex for left and right
+                #then we could miss all middle points on worms being vertices
+                
+                left_lengths = cc - edge_length
+                right_lengths = cc + edge_length
+
+                valid_vertices_I = utils.find((left_lengths > cc[0]) & (right_lengths < cc[-1]))
+                
+                left_lengths = left_lengths[valid_vertices_I]
+                right_lengths = right_lengths[valid_vertices_I]                
+                
+                left_x = np.interp(left_lengths,cc,sx)
+                left_y = np.interp(left_lengths,cc,sy)
+            
+                right_x = np.interp(right_lengths,cc,sx)
+                right_y = np.interp(right_lengths,cc,sy)
+
+                d2_y = sy[valid_vertices_I] - right_y
+                d2_x = sx[valid_vertices_I] - right_x
+                d1_y = left_y - sy[valid_vertices_I]
+                d1_x = left_x - sx[valid_vertices_I] 
+
+                frame_angles = np.arctan2(d2_y,d2_x) - np.arctan2(d1_y,d1_x)
+                
+                frame_angles[frame_angles > np.pi] -= 2*np.pi
+                frame_angles[frame_angles < -np.pi] -= 2*np.pi
+                
+                frame_angles *= 180/np.pi
+                
+                
+                
+                
+                """
+                #The manual interpolation approach
+                #Could see how this 
+                cur_left_I = 0
+                cur_right_I = 0
+
+                right_I = np.empty_like(valid_vertices_I)
+                left_I = np.empty_like(valid_vertices_I)        
+
+                valid_left = left_lengths[valid_vertices_I]
+                valid_right = right_lengths[valid_vertices_I]
+                for cur_I,(cur_left_d,cur_right_d) in enumerate(zip(valid_left,valid_right)):
+                    while cc[cur_left_I] < cur_left_d:
+                        cur_left_I += 1
+                    left_I[cur_I] = cur_left_I - 1
+                    
+                    while cc[cur_right_I] < cur_right_d:
+                        cur_right_I += 1
+                        
+                    right_I[cur_I] = cur_right_I  
+                """    
+                                    
+                    
+                    
+                    
+                import pdb
+                pdb.set_trace()
+                
+                #TODO: find last point that will be valid so we don't have
+                #all the n_points checks
+                cur_I = 0                
+                for cur_new_I,cur_distance in enumerate(new_lengths):
+                    while cur_I < n_points and cur_distance > cc[cur_I]:
+                        cur_I += 1
+                    if cur_I < n_points:
+                        vertex_I[cur_new_I] = cur_I
+                    
+                import pdb
+                pdb.set_trace()
+                
+                valid_vertex_I = vertex_I[vertex_I > -1]
+                end_I = valid_vertex_I[valid_vertex_I]
 
                 old_lengths = cc #renaming for code below ... (being lazy)
 
-                n_points = len(old_lengths)
+                
         
                        
            
