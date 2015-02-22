@@ -43,10 +43,14 @@ class NormalizedWorm(object):
           - (nframes,)
       widths : numpy.array
           - (49,n_frames)
-      head_areas
-      tail_areas
-      vulva_areas
-      non_vulva_areas      
+      head_areas :
+          - (n_frames,)
+      tail_areas :
+          - (n_frames,)
+      vulva_areas :
+          - (n_frames,)
+      non_vulva_areas :
+          - (n_frames,)
 
     Derived Attributes:
     -------------------
@@ -123,54 +127,166 @@ class NormalizedWorm(object):
         #
         #        
         
-        
+        def h__normalizeAllFrames(self,prop_to_normalize):
+            
+            n_frames = len(prop_to_normalize)
+            norm_data = np.full([self.N_POINTS_NORMALIZED,2,n_frames],np.NaN)
+            for iFrame, cur_frame_value in enumerate(prop_to_normalize):
+                if len(cur_frame_value) is not 0:
+                    sx = cur_frame_value[0,:]
+                    sy = cur_frame_value[1,:]
+                    cc = self._computeChainCodeLengths(sx,sy)
+                    norm_data[:,0,iFrame] = self._normalizeParameter(sx,cc)
+                    norm_data[:,1,iFrame] = self._normalizeParameter(sy,cc)
+            
+            return norm_data            
+            
+            
             
         n_frames = len(skeletons)    
         #1) Normalizing the skeleton
         #---------------------------
+        """
         t = time.time()
-        #TODO: Look into full instead of fill
-        #TODO: replace with:
-        #x,y = normalizeAllFrames(skeletons)
-        norm_s_x = np.empty([self.N_POINTS_NORMALIZED,n_frames])
-        norm_s_x.fill(np.NaN)
-        norm_s_y = np.empty([self.N_POINTS_NORMALIZED,n_frames])
-        norm_s_y.fill(np.NaN)
-        for iFrame, frame_skeleton in enumerate(skeletons):
-            if len(frame_skeleton) is not 0:
-                sx = frame_skeleton[0,:]
-                sy = frame_skeleton[1,:]
-                cc = self._computeChainCodeLengths(sx,sy)
-                norm_s_x[:,iFrame] = self._normalizeParameter(sx,cc)
-                norm_s_y[:,iFrame] = self._normalizeParameter(sy,cc)
-            
-           
+        self.skeletons = h__normalizeAllFrames(self,skeletons)        
+        
+        self.vulva_contours = h__normalizeAllFrames(self,vulva_contours)
+        self.non_vulva_contours = h__normalizeAllFrames(self,non_vulva_contours)        
+        
         #1.59 seconds for old approach - without vectors
         elapsed = time.time() - t
-        
-        self.skeletons = np.empty([self.N_POINTS_NORMALIZED,2,n_frames])      
-        self.skeletons[:,1,:] = norm_s_x
-        self.skeletons[:,2,:] = norm_s_y    
         
         
         #2) Compute the skeleton lengths
         #-------------------------------
+        #??? Do this on normalized or non-normalized data ???
+        #Currently done on normalized data
+        
+        #TODO: Merge this into _computeChainCodeLengths
+        dx = np.diff(self.skeletons[:,0,:],axis=0) #axis=1
+        dy = np.diff(self.skeletons[:,1,:],axis=0)
+        
+        distances = np.sqrt(dx**2 + dy**2)
+        
+        self.lengths = np.sum(distances,axis=0)
+        """
+        
+        
+        
+        #Angles
+        #----------------------------------
+        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/skeleton.m
+        #https://github.com/JimHokanson/SegwormMatlabClasses/tree/master/%2Bseg_worm/%2Bcv/curvature.m
+        #
+        #   Note, the above code is written for the non-normalized worm ...
+        #   edge_length= total_length/12
+        #
+        #   Importantly, the above approach calculates angles not between
+        #   neighboring pairs but over a longer stretch of pairs (pairs that
+        #   exceed the edge length). The net effect of this approach is to
+        #   smooth the angles
+        
+        #vertex index - first one where the distance from the tip to this point
+        #is greater than the edge length
+        
+        
+        #s = norm_data[]
+        
+        
+        #temp_s = np.full([self.N_POINTS_NORMALIZED,n_frames],np.NaN)
+        #for iFrame in range(n_frames):
+        #   temp_             
+            
+        #1) Find vertex indices and right indices
            
-           
-        #3) Contours
-        #-----------------------------
-        #We need to normalize the contours
-        for iFrame,vc,nvc in enumerate(zip(vulva_contours,non_vulva_contours)):
-            if len(vc) is not 0:            
-                vc_x = vc[0,:]
+                  
+        for iFrame, cur_frame_value in enumerate(skeletons):
+            if len(cur_frame_value) is not 0:
+                sx = cur_frame_value[0,:]
+                sy = cur_frame_value[1,:]
+                cc = self._computeChainCodeLengths(sx,sy)
                 
+                
+                #Step 1: Get the locations of the vertex and the outer points
+                #that will be used in calculating the tips
+                #--------------------------------------------------------------
+                
+                #This is from the old code
+                edge_length = cc[-1]/12               
+
+                #for a given index, we want to find the index at which point
+                new_lengths = cc + edge_length
+
+                old_lengths = cc #renaming for code below ... (being lazy)
+
+                n_points = len(old_lengths)
+        
+                       
+           
+                #Sort, with old coming before new
+                I = np.argsort(np.concatenate([old_lengths, new_lengths]), kind='mergesort')
+                #Find new points, an old point will be to the left
+                new_I = utils.find(I >= n_points) #indices 0 to n-1, look for >= not > 
+                
+                new_I = new_I[0:-1] #remove last index        
+                
+                import pdb
+                pdb.set_trace()                
+                
+                #We need to go higher so as to make sure that our edge length
+                #is exceeded
+                #e.g.
+                #cc = 0 1 2 3   4   , edge length 3.5
+                #             x   <= location where our new length gets sorted to
+                #
+                vertex_I = I[new_I+1]  
+                
+                #Fails when 2 new points are between old points ...
+                #NOTE: This just indicates that there are 2 ways of estimating
+                #the angle. We'll use the first point but the other algorithm
+                #would have always used the second point                
+                
+                
+                #1) find values less than length                
+                #2) location is the left index point, value is the vertex index
+                
+                #These two will be paired
+                #start_I is the index at which these values occur
+                #The value at that index is the vertex
+                start_I = utils.find(vertex_I < n_points)
+                    
+                final_vertex_I = vertex_I[start_I]    
+                
+                #At this point both the start and vertex are valid
+                #As an example, I now have:
+                #start_I = [0,1,2,3,4 etc]
+                #final_vertex_I = [19,20,21,22]
+
+                #The right point is just this whole process over again
+                #i.e. if our start_I were 20, we could get the final_vertex_I
+                #value and this would complete our triple (i.e. 1,20,that value)
+                #
+                temp_all_vertices = np.full([n_points],-1)                 
+                temp_all_vertices[start_I] = final_vertex_I
+                
+                end_I = temp_all_vertices[final_vertex_I]
+                
+                #Now some of these end_I values will be invalid, but so far
+                #start_I, final_vertex_I, and end_I are all the same length
+                #and index 
+                
+                #TODO: filter all by end_I > -1
+
+           
+
+                #NOTE: Now these points may not be valid, test that they 
+                #exceed the edge length
+
+                import pdb
+                pdb.set_trace()    
                 
         #TODO: Make local function for skeletons and contour
-            def normalizeAllFrames(self,prop_to_normalize):
-                #TODO: Fill this in                
-                
-                
-                pass
+            
             
             
         """
@@ -178,21 +294,21 @@ class NormalizedWorm(object):
         ------------------------
         #1) ??? segmentation_status   
         #2) ??? frame_codes
-        #3) vulva_contours        49 x 2 x n_frames
-        #4) non_vulva_contours    49 x 2 x n_frames
+        #3) DONE vulva_contours        49 x 2 x n_frames
+        #4) DONE non_vulva_contours    49 x 2 x n_frames
         #5) DONE skeletons : numpy.array
           - (49,2,n_frames)
-      angles : numpy.array
+        #6) angles : numpy.array
           - (49,n_frames)
-      in_out_touches ????? 49 x n_frames
-      lengths : numpy.array
+        #7) in_out_touches ????? 49 x n_frames
+        #8) DONE lengths : numpy.array
           - (nframes,)
-      widths : numpy.array
+        #9) widths : numpy.array
           - (49,n_frames)
-      head_areas
-      tail_areas
-      vulva_areas
-      non_vulva_areas 
+        #10) head_areas
+        #11) tail_areas
+        #12) vulva_areas
+        #13) non_vulva_areas 
         
         
         """
@@ -211,6 +327,9 @@ class NormalizedWorm(object):
         """
         
         #TODO: Should handle empty set - remove adding 0 as first element        
+        
+        #TODO: We need this for lengths as well, but the matrix vs vector 
+        #complicates things
         
         dx = np.diff(x)
         dy = np.diff(y)

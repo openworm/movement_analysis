@@ -39,6 +39,9 @@ def main():
     
     #nw = NormalizedWorm.load_matlab_data(data_file_path)
 
+    #import pdb
+    #pdb.set_trace()
+
     nw2 = NormalizedWorm(eid.all_skeletons,eid.all_vulva_contours,
                          eid.all_non_vulva_contours,eid.is_valid)
     
