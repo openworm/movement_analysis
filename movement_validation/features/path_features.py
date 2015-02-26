@@ -6,6 +6,8 @@ path_features.py
 
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 from .. import utils
 
 from . import feature_comparisons as fc
@@ -53,14 +55,20 @@ class Range(object):
     ------------------
     value :
 
+    Range. The centroid of the worm’s entire path is computed. The range is defined as
+    the distance of the worm’s midbody from this overall centroid, in each frame
+    (Supplementary Fig. 4h)
+
+
     """
 
-    def __init__(self, contour_x, contour_y):
+    def __init__(self, contour_x, contour_y, verbose=True):
 
         # Get average per frame
         #------------------------------------------------
         mean_cx = contour_x.mean(axis=0)
         mean_cy = contour_y.mean(axis=0)
+
 
         # Average over all frames for subtracting
         #-------------------------------------------------
@@ -69,6 +77,48 @@ class Range(object):
 
         self.value = np.sqrt(
             (mean_cx - x_centroid_cx) ** 2 + (mean_cy - y_centroid_cy) ** 2)
+
+        if verbose:
+            #plot raw contour
+            plt.figure(1)
+            plt.title('Raw Contour')
+            plt.xlabel('X Position')
+            plt.ylabel('Y Position')
+            plt.plot(contour_x, contour_y)
+            plt.show()
+
+            text1 = '''The raw input to the path is the position of each worm segment,
+            in each frame. This is shown in the plot above with all frames shown at once.'''
+            #output relevant code as well
+            print(text1)
+
+            #plot mean contour
+            plt.figure(2)
+            plt.title('Mean Contour')
+            plt.xlabel('Mean X Position')
+            plt.ylabel('Mean Y Position')
+            plt.plot(mean_cx, mean_cy, 'b', x_centroid_cx, y_centroid_cy, 'r+')
+            plt.show()
+
+            text2 = '''For each frame, the worm segment positions are averaged along the axes. 
+            This average position is plotted above for all frames above. The centroid is calculated
+            as the $$\sqrt{(mean\_{x}-centroid\_{x})\^{2} + (mean_y-centroid_y)\^{2}}$$. 
+            The centroid for this data is ''' + str((x_centroid_cx, y_centroid_cy)) + ''' and is plotted
+            as a red "+" above.'''
+            print(text2)
+
+            #plot distance from centroid at each frame
+            plt.figure(3)
+            plt.title('Distance from Centroid')
+            plt.xlabel('Frame')
+            plt.ylabel('Distance')
+            plt.plot(self.value)
+            plt.show()
+
+            text3 = '''The returned value is the distance from the centroid. 
+            This is plotted above versus frame.'''
+            print(text3)
+
 
     @classmethod
     def from_disk(cls,path_var):
