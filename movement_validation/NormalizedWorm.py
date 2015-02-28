@@ -104,6 +104,8 @@ class NormalizedWorm(object):
             Each element in the list may be empty (bad frame) or be of size
             2 x n, where n varies depending on the # of pixels the worm occupied
             in the given frame
+            
+        vulva_contours and non_vulva_contours should start and end at the same locations, from head to tail
 
         """
 
@@ -248,8 +250,6 @@ class NormalizedWorm(object):
                 temp_angle_list.append(all_frame_angles)
                 
         self.angles = h__normalizeAllFrames(self,temp_angle_list,skeletons)         
-        import pdb
-        pdb.set_trace()
        
         #Widths:
         #------------------------------------
@@ -267,9 +267,153 @@ class NormalizedWorm(object):
         #Widths are simply the distance between two "corresponding" sides of
         #the contour. The question is how to get these two locations.                
         
+        #Skeletonize code:
+        #- Go along from start to end
+        #- distance between points on contour 1 and contour 2, dnj1, dnj2
+        #
+        #   a   b  c  d
+        #   -   -  -  - 1
+        #    /  \d2
+        #   /d1  \
+        #   -   -  -  - 2
+        #   e  f g h
+        #
+        # dab - dnj1  - vector
+        # def - dnj2  - vector
+        # daf - d2    - distance
+        # deb - d1    - distance
+        # dbf - d12   - distance
+        #
+        #   Options:
+        #   1) advance along both contours, distance is between 2 next points
+        #   2) similar directions, distance is lesser of d1 or d2
+        #   3) opposite directions
+        #   
+          
+        import pdb          
+          
+        temp_widths_list = []          
+          
+        for iFrame, (vc,nvc) in enumerate(zip(vulva_contours,non_vulva_contours)):
+            #vc [2,n]
+            #nvc [2,n]
+            
+            
+            """
+                import matplotlib.pyplot as plt
+                plt.scatter(vc[0,:],vc[1,:])
+                plt.scatter(nvc[0,:],nvc[1,:])
+                plt.gca().set_aspect('equal', adjustable='box')
+                plt.show()
+                
+                plt.plot(x_plot,y_plot)
+                plt.show()
+            """            
+            
+            #TODO: Make sure to bound
+            cur_output_I = 0
+            
+            vc_I  = int(1)
+            nvc_I = int(1)
+            n_points = vc.shape[1]
+            contour_widths = np.zeros(n_points)
+            
+            cur_xy_I = -3
+            x_plot = np.full(n_points*3,np.NaN)
+            y_plot = np.full(n_points*3,np.NaN)
+            
+            while (nvc_I != (n_points-2)) and (vc_I != (n_points-2)):
+                cur_xy_I += 3 #skip a NaN too
+                cur_output_I += 1             
+             
+                next_vc_I  = vc_I + 1
+                next_nvc_I = nvc_I + 1
+                
+                if next_vc_I == 215:
+                    pdb.set_trace()
+                v_vc   = vc[:,next_vc_I] - vc[:,vc_I]     #dnj1
+                v_nvc  = nvc[:,next_nvc_I] - nvc[:,nvc_I] #dnj2
+                d_next = np.sum((vc[:,next_vc_I]-nvc[:,next_nvc_I])**2) #d12
+                d_vc   = np.sum((vc[:,next_vc_I]-nvc[:,nvc_I])**2) #d1
+                d_nvc  = np.sum((vc[:,next_nvc_I]-nvc[:,vc_I])**2) #d2
+              
+                if (d_vc == d_nvc) or ((d_next <= d_vc) and (d_next <= d_nvc)):
+                    vc_I = next_vc_I
+                    nvc_I = next_nvc_I
+                    contour_widths[cur_output_I] = np.sqrt(d_next)
+                    
+                    x_plot[cur_xy_I] = vc[0,vc_I]
+                    y_plot[cur_xy_I] = vc[1,vc_I]   
+                    x_plot[cur_xy_I+1] = nvc[0,nvc_I]
+                    y_plot[cur_xy_I+1] = nvc[1,nvc_I]
+                    
+                    
+                elif np.all((v_vc*v_nvc) >= 0):
+                #contours go in similar directions
+                #
+                #Multiplication is checking that we have +*+ or -*- or 
+                #a zero or two thrown in there (for the x & ys)
+                #
+                #NOTE: in general we want the smallest width as this is indicative
+                #of being orthogonal to the direction of the body where
+                #as going across the body at an angle will increase the apparent 
+                #width (indicating that the larger width is not appropriate)
+                
+                    if d_vc < d_nvc:
+                        vc_I = next_vc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_vc)
+                        
+                        x_plot[cur_xy_I] = vc[0,next_vc_I]
+                        y_plot[cur_xy_I] = vc[1,next_vc_I]   
+                        x_plot[cur_xy_I+1] = nvc[0,nvc_I]
+                        y_plot[cur_xy_I+1] = nvc[1,nvc_I]                        
+                        
+                        
+                    else:
+                        nvc_I = next_nvc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
+
+                        x_plot[cur_xy_I] = vc[0,next_vc_I]
+                        y_plot[cur_xy_I] = vc[1,next_vc_I]   
+                        x_plot[cur_xy_I+1] = nvc[0,nvc_I]
+                        y_plot[cur_xy_I+1] = nvc[1,nvc_I] 
+                        
+                else:        
+                # The contours go in opposite directions.
+                # Follow decreasing widths or walk along both contours.
+                # In other words, catch up both contours, then walk along both.
+                # Note: this step negotiates hairpin turns and bulges.                        
+                    prev_width = contour_widths[cur_output_I]**2
+                    if ((d_next <= d_vc) and (d_next <= d_nvc)) or ((d_vc > prev_width) and (d_nvc > prev_width)):
+                        vc_I = next_vc_I
+                        nvc_I = next_nvc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_next)  
+                    elif d_vc < d_nvc:
+                        vc_I = next_vc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_vc)
+                    else:
+                        nvc_I = next_nvc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
+                        
+                    
+                temp_widths_list.append(contour_widths)    
+              
+              
+            pdb.set_trace()
+              
+              
+            #I1 = 1
+            #I2 = 1
+            
+            #e1 = vc.shape[1]-2
+            #e2
+            #import pdb
+            #pdb.set_trace()
+        
+        
         """
         From Ev's Thesis:
-        3.3.1.6
+        3.3.1.6 - page 126 (or 110 as labeled in document)
         For each section, we begin at its center on both sides of the contour. We then
         walk, pixel by pixel, in either direction until we hit the end of the section on
         opposite sides, for both directions. The midpoint, between each opposing pixel

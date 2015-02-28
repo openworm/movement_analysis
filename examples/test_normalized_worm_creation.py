@@ -37,10 +37,14 @@ def main():
     eid = example_input_data
     
     
-    #nw = NormalizedWorm.load_matlab_data(data_file_path)
+    nw = NormalizedWorm.load_matlab_data(data_file_path)
 
-    #import pdb
-    #pdb.set_trace()
+
+#    vc  = nw.vulva_contours[:,:,0]
+#    nvc = nw.non_vulva_contours[:,:,0]
+#
+#    import pdb
+#    pdb.set_trace()
 
     nw2 = NormalizedWorm(eid.all_skeletons,eid.all_vulva_contours,
                          eid.all_non_vulva_contours,eid.is_valid)
