@@ -458,7 +458,7 @@ class WormPath(object):
 
     """
 
-    def __init__(self, features_ref):
+    def __init__(self, features_ref, explain=[]):
         """
         Initialization method for WormPosture
 
@@ -466,11 +466,13 @@ class WormPath(object):
         -----------
         features_ref: a WormFeatures instance
         """
-        print('Calculating Path Features')        
+        print('Calculating Path Features')
+
+        print(explain)        
 
         nw = features_ref.nw
 
-        self.range = path_features.Range(nw.contour_x, nw.contour_y)
+        self.range = path_features.Range(nw.contour_x, nw.contour_y, explain=explain)
 
         # Duration (aka Dwelling)
         self.duration = path_features.Duration(features_ref)
@@ -548,7 +550,7 @@ class WormFeatures(object):
 
     """
 
-    def __init__(self, nw, video_info, processing_options=None):
+    def __init__(self, nw, video_info, processing_options=None, explain=[]):
         """
         
         Parameters
@@ -559,6 +561,8 @@ class WormFeatures(object):
 
         """
         
+        print(explain)
+
         #TODO: Create the normalized worm in here ... 
 
         if processing_options is None:
@@ -574,7 +578,7 @@ class WormFeatures(object):
         self.locomotion = WormLocomotion(self)
         self.posture = WormPosture(self, 
                                    self.locomotion.velocity.get_midbody_distance())
-        self.path = WormPath(self)
+        self.path = WormPath(self, explain=explain)
 
     @classmethod
     def from_disk(cls, file_path):

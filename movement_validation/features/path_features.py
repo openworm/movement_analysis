@@ -15,6 +15,8 @@ from . import feature_comparisons as fc
 # import this as 'velocity_module':
 from . import velocity as velocity_module 
 
+import inspect
+
 
 class Coordinates(object):
     
@@ -62,7 +64,7 @@ class Range(object):
 
     """
 
-    def __init__(self, contour_x, contour_y, verbose=True):
+    def __init__(self, contour_x, contour_y, explain=[]):
 
         # Get average per frame
         #------------------------------------------------
@@ -78,47 +80,75 @@ class Range(object):
         self.value = np.sqrt(
             (mean_cx - x_centroid_cx) ** 2 + (mean_cy - y_centroid_cy) ** 2)
 
-        if verbose:
-            #plot raw contour
-            plt.figure(1)
-            plt.title('Raw Contour')
-            plt.xlabel('X Position')
-            plt.ylabel('Y Position')
-            plt.plot(contour_x, contour_y)
-            plt.show()
+        if 'range' in explain:
+            self.explain(contour_x, contour_y, mean_cx, mean_cy, x_centroid_cx, y_centroid_cy)
 
-            text1 = '''The raw input to the path is the position of each worm segment,
-            in each frame. This is shown in the plot above with all frames shown at once.'''
-            #output relevant code as well
-            print(text1)
 
-            #plot mean contour
-            plt.figure(2)
-            plt.title('Mean Contour')
-            plt.xlabel('Mean X Position')
-            plt.ylabel('Mean Y Position')
-            plt.plot(mean_cx, mean_cy, 'b', x_centroid_cx, y_centroid_cy, 'r+')
-            plt.show()
+    def explain(self, contour_x, contour_y, mean_cx, mean_cy, x_centroid_cx, y_centroid_cy):
 
-            text2 = '''For each frame, the worm segment positions are averaged along the axes. 
-            This average position is plotted above for all frames above. The centroid is calculated
-            as the $$\sqrt{(mean\_{x}-centroid\_{x})\^{2} + (mean_y-centroid_y)\^{2}}$$. 
-            The centroid for this data is ''' + str((x_centroid_cx, y_centroid_cy)) + ''' and is plotted
-            as a red "+" above.'''
-            print(text2)
+        #This pulls the source code using the inspect module and then splits into relevant subsections
+        #The output is a tuple containing one list which has the lines.
+        source = inspect.getsourcelines(Range.__init__)[0] 
+        definition = source[:2]
+        avgperframe = source[2:7]
+        centroid = source[7:13]
+        rangecalc = source[12:16]
 
-            #plot distance from centroid at each frame
-            plt.figure(3)
-            plt.title('Distance from Centroid')
-            plt.xlabel('Frame')
-            plt.ylabel('Distance')
-            plt.plot(self.value)
-            plt.show()
 
-            text3 = '''The returned value is the distance from the centroid. 
-            This is plotted above versus frame.'''
-            print(text3)
+        print(definition)
 
+        text1 = \
+        '''The raw input to the path is the position of each worm segment, in each frame. 
+        This is shown below for all frames in the plot.'''
+        print(text1)
+
+        #plot raw contour
+        plt.figure(1)
+        plt.title('Raw Contour')
+        plt.xlabel('X Position')
+        plt.ylabel('Y Position')
+        plt.plot(contour_x, contour_y)
+        plt.show()
+
+
+
+        print(avgperframe)
+
+        text2 = \
+        '''For each frame, the worm segment positions are averaged along the axes using the code below. 
+        This average position is plotted above for all frames above.'''
+        print(text2)
+
+        print(centroid)
+
+        text3 = \
+        '''The centroid is calculated as the average of the mean positions over all frames.
+        For this example data, the centroid is ''' + str((x_centroid_cx, y_centroid_cy)) + ''' and is plotted as a red "+" above.'''
+        print(text3)
+
+        #plot mean contour and centroid
+        plt.figure(2)
+        plt.title('Mean Contour')
+        plt.xlabel('Mean X Position')
+        plt.ylabel('Mean Y Position')
+        plt.plot(mean_cx, mean_cy, 'b', x_centroid_cx, y_centroid_cy, 'r+')
+        plt.show()
+
+        print(rangecalc)
+
+        text4 = \
+        '''The returned value is the distance from the centroid. The distance to the centroid is 
+        calculated as $$\sqrt{(mean\_{x}-centroid\_{x})\^{2} + (mean_y-centroid_y)\^{2}}$$. 
+        The distance of the worm from the centroid in each frame is plotted below.'''
+        print(text4)
+
+        #plot distance from centroid at each frame
+        plt.figure(3)
+        plt.title('Distance from Centroid')
+        plt.xlabel('Frame')
+        plt.ylabel('Distance')
+        plt.plot(self.value)
+        plt.show()
 
     @classmethod
     def from_disk(cls,path_var):
