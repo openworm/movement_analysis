@@ -110,13 +110,30 @@ for iFrame = frame_values %1:100:4642
     
     [dp_values1,match_I1] = h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I);
     
+    END_S1_WALK = 40; %TODO: Make a percentage ...
+    [p1_I,p2_I] = h__getPartnersViaWalk(1,END_S1_WALK,1,100,d_across,s1,s2);
     
-    [p1_I,p2_I] = h__getPartnersViaWalk(1,20,1,100,d_across,s1,s2);
+    match_I1(p1_I) = p2_I;
     
     keep_mask = false(1,length(match_I1));
     keep_mask(p1_I) = true;
-    keep_mask(21:end) = true;
-    keep_mask(1) = true; %Always keep point 1, match with 1 of other
+    
+    n_s1 = length(s1);
+    n_s2 = length(s2);
+    END_S1_WALK_BACKWARDS = n_s1 - 40;
+    END_S2_WALK_BACKWARDS = n_s2 - 60;
+    
+    
+    [p1_I,p2_I] = h__getPartnersViaWalk(n_s1,END_S1_WALK_BACKWARDS,n_s2,END_S2_WALK_BACKWARDS,d_across,s1,s2);
+    match_I1(p1_I) = p2_I;
+    keep_mask(p1_I) = true;
+    
+    %anything in between we'll use the projection appproach
+    keep_mask(END_S1_WALK+1:END_S1_WALK_BACKWARDS-1) = true;
+    
+    %Always keep ends
+    keep_mask(1)   = true; 
+    keep_mask(end) = true;
     
     match_I1(p1_I) = p2_I;
     match_I1(1) = 1;
@@ -431,7 +448,7 @@ I = left_I + dp_I - 1;
 
 end
 
-function [p1_I,p2_I] = h__getPartnersViaWalk(s1,e1,s2,e2,d,d1,d2)
+function [p1_I,p2_I] = h__getPartnersViaWalk(s1,e1,s2,e2,d,xy1,xy2)
 %
 %   s1: start index for side 1
 %   e1: end index for side 1
@@ -445,50 +462,52 @@ function [p1_I,p2_I] = h__getPartnersViaWalk(s1,e1,s2,e2,d,d1,d2)
 %
 %
 
-ds1 = diff(d1);
-ds2 = diff(d2);
 
 %TODO: remove hardcode
 p1_I = zeros(1,200);
 p2_I = zeros(1,200);
 
-i1 = s1;
-i2 = s2;
-cur_p_I = 0;
+c1 = s1; %current 1 index
+c2 = s2; %current 2 index
+cur_p_I = 0; %current pair index
 
 
-
-while i1 ~= e1 && i2 ~= e2
+while c1 ~= e1 && c2 ~= e2
     cur_p_I = cur_p_I + 1;
     
-    next1 = i1+1;
-    next2 = i2+2;
+    if e1 < s1
+        next1 = c1-1;
+        next2 = c2-1;        
+    else
+        next1 = c1+1;
+        next2 = c2+1;
+    end
     
-    v_n1_to_c1 = d1(next1,:) - d1(i1,:);
-    v_n2_to_c2 = d2(next2,:) - d2(i2,:);
+    v_n1c1 = xy1(next1,:) - xy1(c1,:);
+    v_n2c2 = xy2(next2,:) - xy2(c2,:);
     
-    d_n1_to_n2 = d(next1,next2);
-    d_n1_to_c2 = d(next1,i2);
-    d_n2_to_c1 = d(i1,next2);
+    d_n1n2 = d(next1,next2);
+    d_n1c2 = d(next1,c2);
+    d_n2c1 = d(c1,next2);
     
     
-    if d_n1_to_c2 == d_n2_to_c1 || (d_n1_to_n2 <= d_n1_to_c2 && d_n1_to_n2 <= d_n2_to_c1)
+    if d_n1c2 == d_n2c1 || (d_n1n2 <= d_n1c2 && d_n1n2 <= d_n2c1)
         %Advance along both contours
         
         p1_I(cur_p_I) = next1;
         p2_I(cur_p_I) = next2;
         
-        i1 = next1;
-        i2 = next2;
+        c1 = next1;
+        c2 = next2;
         
-    elseif all((v_n1_to_c1.*v_n2_to_c2) > -1)
+    elseif all((v_n1c1.*v_n2c2) > -1)
         %contours go similar directions
         %follow smallest width
-        if d_n1_to_c2 < d_n2_to_c1
+        if d_n1c2 < d_n2c1
             %consume smaller distance, then move the base of the vector
             %further forward
             p1_I(cur_p_I) = next1;
-            p2_I(cur_p_I) = i2;
+            p2_I(cur_p_I) = c2;
             
             %This bit always confuses me
             %c1  n1
@@ -497,11 +516,11 @@ while i1 ~= e1 && i2 ~= e2
             %c2  x  x  x  n2
             %
             %Advance c1 so that d_n2_to_c1 is smaller next time
-            i1 = next1;
+            c1 = next1;
         else
-            p1_I(cur_p_I) = i1;
+            p1_I(cur_p_I) = c1;
             p2_I(cur_p_I) = next2;
-            i2 = next2;
+            c2 = next2;
         end
     else
         
@@ -511,20 +530,20 @@ while i1 ~= e1 && i2 ~= e2
             prev_width = d(p1_I(cur_p_I-1),p2_I(cur_p_I-1));
         end
         
-        if (d_n1_to_c2 > prev_width && d_n2_to_c1 > prev_width)
+        if (d_n1c2 > prev_width && d_n2c1 > prev_width)
             p1_I(cur_p_I) = next1;
             p2_I(cur_p_I) = next2;
             
-            i1 = next1;
-            i2 = next2;
-        elseif d_n1_to_c2 < d_n2_to_c1
+            c1 = next1;
+            c2 = next2;
+        elseif d_n1c2 < d_n2c1
             p1_I(cur_p_I) = next1;
-            p2_I(cur_p_I) = i2;
-            i1 = next1;
+            p2_I(cur_p_I) = c2;
+            c1 = next1;
         else
-            p1_I(cur_p_I) = i1;
+            p1_I(cur_p_I) = c1;
             p2_I(cur_p_I) = next2;
-            i2 = next2;
+            c2 = next2;
         end
         
     end
