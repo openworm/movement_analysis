@@ -11,6 +11,7 @@ import warnings
 import os
 import inspect
 import h5py
+import scipy.signal.savgol_filter as sgolay
 
 from . import config
 from . import utils
@@ -251,6 +252,16 @@ class NormalizedWorm(object):
                 
         self.angles = h__normalizeAllFrames(self,temp_angle_list,skeletons)         
        
+        import pdb  
+       
+        
+        #Widths, v2:
+        #--------------------
+        temp_widths_list = [] 
+        for iFrame, (vc,nvc) in enumerate(zip(vulva_contours,non_vulva_contours)):       
+       
+            pdb.set_trace()       
+       
         #Widths:
         #------------------------------------
         #The caller:
@@ -290,7 +301,7 @@ class NormalizedWorm(object):
         #   3) opposite directions
         #   
           
-        import pdb          
+                
           
         temp_widths_list = []          
           
@@ -316,11 +327,15 @@ class NormalizedWorm(object):
             vc_I  = int(1)
             nvc_I = int(1)
             n_points = vc.shape[1]
-            contour_widths = np.zeros(n_points)
+            contour_widths = np.zeros(n_points*2)
             
             cur_xy_I = -3
-            x_plot = np.full(n_points*3,np.NaN)
-            y_plot = np.full(n_points*3,np.NaN)
+            x_plot = np.full(n_points*5,np.NaN)
+            y_plot = np.full(n_points*5,np.NaN)
+            x_plot2 = np.full(n_points*5,np.NaN)
+            y_plot2 = np.full(n_points*5,np.NaN)
+            x_plot3 = np.full(n_points*5,np.NaN)
+            y_plot3 = np.full(n_points*5,np.NaN)
             
             while (nvc_I != (n_points-2)) and (vc_I != (n_points-2)):
                 cur_xy_I += 3 #skip a NaN too
@@ -335,9 +350,10 @@ class NormalizedWorm(object):
                 v_nvc  = nvc[:,next_nvc_I] - nvc[:,nvc_I] #dnj2
                 d_next = np.sum((vc[:,next_vc_I]-nvc[:,next_nvc_I])**2) #d12
                 d_vc   = np.sum((vc[:,next_vc_I]-nvc[:,nvc_I])**2) #d1
-                d_nvc  = np.sum((vc[:,next_nvc_I]-nvc[:,vc_I])**2) #d2
+                d_nvc  = np.sum((vc[:,next_nvc_I]-nvc[:,vc_I])**2) #d2 - nvc
               
-                if (d_vc == d_nvc) or ((d_next <= d_vc) and (d_next <= d_nvc)):
+                #(d_vc == d_nvc) or 
+                if ((d_next <= d_vc) and (d_next <= d_nvc)):
                     vc_I = next_vc_I
                     nvc_I = next_nvc_I
                     contour_widths[cur_output_I] = np.sqrt(d_next)
@@ -363,20 +379,20 @@ class NormalizedWorm(object):
                         vc_I = next_vc_I
                         contour_widths[cur_output_I] = np.sqrt(d_vc)
                         
-                        x_plot[cur_xy_I] = vc[0,next_vc_I]
-                        y_plot[cur_xy_I] = vc[1,next_vc_I]   
-                        x_plot[cur_xy_I+1] = nvc[0,nvc_I]
-                        y_plot[cur_xy_I+1] = nvc[1,nvc_I]                        
+                        x_plot2[cur_xy_I] = vc[0,next_vc_I]
+                        y_plot2[cur_xy_I] = vc[1,next_vc_I]   
+                        x_plot2[cur_xy_I+1] = nvc[0,nvc_I]
+                        y_plot2[cur_xy_I+1] = nvc[1,nvc_I]                        
                         
                         
                     else:
                         nvc_I = next_nvc_I
                         contour_widths[cur_output_I] = np.sqrt(d_nvc)
 
-                        x_plot[cur_xy_I] = vc[0,next_vc_I]
-                        y_plot[cur_xy_I] = vc[1,next_vc_I]   
-                        x_plot[cur_xy_I+1] = nvc[0,nvc_I]
-                        y_plot[cur_xy_I+1] = nvc[1,nvc_I] 
+                        x_plot3[cur_xy_I] = vc[0,next_vc_I]
+                        y_plot3[cur_xy_I] = vc[1,next_vc_I]   
+                        x_plot3[cur_xy_I+1] = nvc[0,nvc_I]
+                        y_plot3[cur_xy_I+1] = nvc[1,nvc_I] 
                         
                 else:        
                 # The contours go in opposite directions.
@@ -398,6 +414,14 @@ class NormalizedWorm(object):
                     
                 temp_widths_list.append(contour_widths)    
               
+              
+            """
+            plt.plot(x_plot2,y_plot2,color='b')
+            plt.plot(x_plot,y_plot,color='r')
+            plt.plot(x_plot3,y_plot3,color='g')
+            plt.show()
+            
+            """
               
             pdb.set_trace()
               

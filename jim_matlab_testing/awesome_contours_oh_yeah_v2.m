@@ -18,7 +18,7 @@ function awesome_contours_oh_yeah_v2(frame_values)
 %
 %   Status:
 %   -------
-%   1) algorithm doesn't work on non parallel surfaces, consider a diamond
+%   1) FIXED algorithm doesn't work on non parallel surfaces, consider a diamond
 %    /|\
 %   / | \
 %   \ | /
@@ -26,7 +26,7 @@ function awesome_contours_oh_yeah_v2(frame_values)
 %       This practically has an effect at the ends and needs to be fixed.
 %      Interpolation of good values might fix this problem.
 %
-%   2) FIXED Points are not guaranteed to be ordered, so a dot product would
+%   2) SOMEWHAT HANDLED Points are not guaranteed to be ordered, so a dot product would
 %   need to be computed for subsequent points to look for reversals.
 %
 %   i.e., this would be fine for midpoints - no backtracking
@@ -92,6 +92,7 @@ for iFrame = frame_values %1:100:4642
     
     
     %TODO: Allow downsampling if the # of points is rediculous
+    %200 points seems to be a good #
     %This operation gives us a matrix that is len(s1) x len(s2)
     dx_across = bsxfun(@minus,s1(:,1),s2(:,1)');
     dy_across = bsxfun(@minus,s1(:,2),s2(:,2)');
@@ -110,8 +111,13 @@ for iFrame = frame_values %1:100:4642
     
     [dp_values1,match_I1] = h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I);
     
-    END_S1_WALK = 40; %TODO: Make a percentage ...
-    [p1_I,p2_I] = h__getPartnersViaWalk(1,END_S1_WALK,1,100,d_across,s1,s2);
+    %Move below into a function
+    %======================================================================
+    %TODO: Make this a percentage, perhaps 15 to 20 %
+    END_S1_WALK_PCT = 0.15;
+    end_s1_walk_I = ceil(length(s1)*END_S1_WALK_PCT);
+    end_s2_walk_I = 2*end_s1_walk_I;
+    [p1_I,p2_I] = h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2);
     
     match_I1(p1_I) = p2_I;
     
@@ -120,93 +126,49 @@ for iFrame = frame_values %1:100:4642
     
     n_s1 = length(s1);
     n_s2 = length(s2);
-    END_S1_WALK_BACKWARDS = n_s1 - 40;
-    END_S2_WALK_BACKWARDS = n_s2 - 60;
+    end_s1_walk_backwards = n_s1 - end_s1_walk_I;
+    end_s2_walk_backwards = n_s2 - end_s2_walk_I;
     
     
-    [p1_I,p2_I] = h__getPartnersViaWalk(n_s1,END_S1_WALK_BACKWARDS,n_s2,END_S2_WALK_BACKWARDS,d_across,s1,s2);
+    [p1_I,p2_I] = h__getPartnersViaWalk(n_s1,end_s1_walk_backwards,n_s2,end_s2_walk_backwards,d_across,s1,s2);
     match_I1(p1_I) = p2_I;
     keep_mask(p1_I) = true;
     
     %anything in between we'll use the projection appproach
-    keep_mask(END_S1_WALK+1:END_S1_WALK_BACKWARDS-1) = true;
+    keep_mask(end_s1_walk_I+1:end_s1_walk_backwards-1) = true;
     
     %Always keep ends
     keep_mask(1)   = true; 
     keep_mask(end) = true;
+    %======================================================================
     
-    match_I1(p1_I) = p2_I;
+    
     match_I1(1) = 1;
+    match_I1(end) = length(s2);
+    
 
+    %This isn't perfect but it removes some back and forth behavior
+    %of the matching. We'd rather drop points and smooth
+    I_1 = find(keep_mask);
+    I_2 = match_I1(keep_mask);
     
-    s1_x = s1(keep_mask,1);
-    s1_y = s1(keep_mask,2);
-    s1_px = s2(match_I1(keep_mask),1);
-    s1_py = s2(match_I1(keep_mask),2);
+    is_good = [true; ((I_2(2:end-1) <= I_2(3:end)) & (I_2(2:end-1) >= I_2(1:end-2))); true];
     
-% %     mid_x = 0.5*(s1_x + s1_px);
-% %     mid_y = 0.5*(s1_y + s1_py);
-    % dx = diff(mid_x);
-    % dy = diff(mid_y);
-    %
-    % dm = sqrt(dx.^2+dy.^2
+    I_1(~is_good) = [];
+    I_2(~is_good) = [];
     
-    
-    
-    %keyboard
-    
-    
-    %Causes problems with frame 41
-    %Use a smoothing algorithm instead ...
-    % % % %remove_mask = h__getBackwardsRemoveMask(mid_x,mid_y);
-    % % %
-    % % % %TODO: Make % of worm
-    % % % % remove_mask(2:30) = true;
-    % % % % remove_mask(end-30:end-1) = true;
-    % % %
-    % % %
-    % % % dp_values1(remove_mask) = [];
-    % % % s1_x(remove_mask) = [];
-    % % % s1_y(remove_mask) = [];
-    % % % s1_px(remove_mask) = [];
-    % % % s1_py(remove_mask) = [];
-    
-    
-    mid_x = 0.5*(s1_x + s1_px);
-    mid_y = 0.5*(s1_y + s1_py);
+    s1_x = s1(I_1,1);
+    s1_y = s1(I_1,2);
+    s1_px = s2(I_2,1); %s1_pair x
+    s1_py = s2(I_2,2);
+        
+    %TODO: Allow smoothing on x & y
+    skeleton_x = 0.5*(s1_x + s1_px);
+    skeleton_y = 0.5*(s1_y + s1_py);
     widths1 = sqrt((s1_px-s1_x).^2 + (s1_py - s1_y).^2); %widths
-    cum_dist1 = h__getSkeletonDistance(mid_x,mid_y);
-    
-    
-    
-    
-    % new_d = linspace(cum_dist1(1),cum_dist1(end),200);
-    %
-    % f = csape(cum_dist1,mid_x);
-    % fx = fnval(f,new_d);
-    % f = csape(cum_dist1,mid_y);
-    % fy = fnval(f,new_d);
-    
-    % % subplot(2,1,1)
-    % % plot(cum_dist1,mid_x,'o')
-    % %
-    % % hold all
-    % % plot(new_d,fx);
-    % % hold off
-    % %
-    % % subplot(2,1,2)
-    % % plot(cum_dist1,mid_y,'o')
-    % % hold all
-    % % plot(new_d,fy);
-    % % hold off
-    
-    %all s2 matching to s1
-    %---------------------
-% % % %     [left_I,right_I] = h__getBounds(size(s2,1),size(s1,1),P_BACK,P_FORWARD);
-% % % %     [norm_x,norm_y]  = h__computeNormalVectors(s2);
-% % % %     
-% % % %     [dp_values2,match_I2] = h__getMatches(s2,s1,norm_x,norm_y,dx_across',dy_across',d_across',left_I,right_I);
-    
+
+    %skeleton_x = csaps(1:length(skeleton_x),skeleton_x,
+
     %toc
     %Plotting Results
     %-------------------
@@ -237,7 +199,7 @@ for iFrame = frame_values %1:100:4642
         plot(s1(2:end-1,1),s1(2:end-1,2),'ro')
         plot(s2(2:end-1,1),s2(2:end-1,2),'bo')
         
-        plot(mid_x,mid_y,'d-')
+        plot(skeleton_x,skeleton_y,'d-')
         %     plot(fx,fy,'-k')
         
         
@@ -280,7 +242,7 @@ for iFrame = frame_values %1:100:4642
         %Width should really be plotted as a function of distance along the skeleton
         
         
-        cum_dist = h__getSkeletonDistance(mid_x,mid_y);
+        cum_dist = h__getSkeletonDistance(skeleton_x,skeleton_y);
         
         subplot(2,3,6)
         plot(cum_dist./cum_dist(end),widths1,'r.-')
@@ -303,40 +265,62 @@ end
 
 end
 
-function remove_mask = h__getBackwardsRemoveMask(mid_x,mid_y)
-%
-%   We want the dot product of vectors to keep moving forward not back
-%
-%   We're using a cutoff of 0 here, which means anything smaller than a right
-%   turn is allowed.
-%
-
-remove_mask = false(1,length(mid_x));
-
-last_dx = mid_x(2)-mid_x(1);
-last_dy = mid_y(2)-mid_y(1);
-dm = sqrt(last_dx.^2 + last_dy.^2);
-last_dx = last_dx./dm;
-last_dy = last_dy./dm;
-
-last_valid_point = 2; %We keep points 1 & 2 to initialize
-for iPoint = 3:length(mid_x)
-    cur_dx = mid_x(iPoint)-mid_x(last_valid_point);
-    cur_dy = mid_y(iPoint)-mid_y(last_valid_point);
-    dm = sqrt(cur_dx.^2 + cur_dy.^2);
-    cur_dx = cur_dx./dm;
-    cur_dy = cur_dy./dm;
-    
-    dp = cur_dx*last_dx + cur_dy*last_dy;
-    if dp > 0
-        last_dx = cur_dx;
-        last_dy = cur_dy;
-        last_valid_point = iPoint;
-    else
-        remove_mask(iPoint) = true;
-    end
-end
-end
+% % % % % % function remove_mask = h__getBackwardsRemoveMask(mid_x,mid_y)
+% % % % % % %
+% % % % % % %   We want the dot product of vectors to keep moving forward not back
+% % % % % % %
+% % % % % % %   We're using a cutoff of 0 here, which means anything smaller than a right
+% % % % % % %   turn is allowed.
+% % % % % % %
+% % % % % % 
+% % % % % % 
+% % % % % % base_I = 1;
+% % % % % % last_valid_I = 2;
+% % % % % % 
+% % % % % % dm = sqrt(last_dx.^2 + last_dy.^2);
+% % % % % % 
+% % % % % % for cur_I = 3:length(mid_x)
+% % % % % %     
+% % % % % %     
+% % % % % %     
+% % % % % % end
+% % % % % % 
+% % % % % % % % % % % remove_mask = false(1,length(mid_x));
+% % % % % % % % % % % 
+% % % % % % % % % % % last_dx = mid_x(2)-mid_x(1);
+% % % % % % % % % % % last_dy = mid_y(2)-mid_y(1);
+% % % % % % % % % % % dm = sqrt(last_dx.^2 + last_dy.^2);
+% % % % % % % % % % % last_dx = last_dx./dm;
+% % % % % % % % % % % last_dy = last_dy./dm;
+% % % % % % % % % % % 
+% % % % % % % % % % % last_dm = dm;
+% % % % % % % % % % % 
+% % % % % % % % % % % last_valid_point = 2; %We keep points 1 & 2 to initialize
+% % % % % % for cur_I = 3:length(mid_x)
+% % % % % %     cur_dx = mid_x(iPoint) - mid_
+% % % % % %     
+% % % % % %     
+% % % % % %     cur_dx = mid_x(iPoint)-mid_x(last_valid_point);
+% % % % % %     cur_dy = mid_y(iPoint)-mid_y(last_valid_point);
+% % % % % %     dm = sqrt(cur_dx.^2 + cur_dy.^2);
+% % % % % %     
+% % % % % %         
+% % % % % %         
+% % % % % %         
+% % % % % %         
+% % % % % %     cur_dx = cur_dx./dm;
+% % % % % %     cur_dy = cur_dy./dm;
+% % % % % %     
+% % % % % %     dp = cur_dx*last_dx + cur_dy*last_dy;
+% % % % % %     if dp > 0
+% % % % % %         last_dx = cur_dx;
+% % % % % %         last_dy = cur_dy;
+% % % % % %         last_valid_point = iPoint;
+% % % % % %     else
+% % % % % %         remove_mask(iPoint) = true;
+% % % % % %     end
+% % % % % % end
+% % % % % % end
 
 function cum_dist = h__getSkeletonDistance(mid_x,mid_y)
 dx = diff(mid_x);
@@ -422,6 +406,7 @@ function [dp_value,I] = h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_
 
 dp = dx_across_worm*vc_dx_ortho + dy_across_worm*vc_dy_ortho;
 
+%This is slow, presumably due to the memory allocation ...
 %               < right                         < left
 %possible = [dp(1:end-1) < dp(2:end) false] & [false dp(2:end) < dp(1:end-1)];
 possible = (dp(2:end-1) < dp(3:end)) & (dp(2:end-1) < dp(1:end-2));
