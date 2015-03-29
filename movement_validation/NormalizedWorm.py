@@ -11,7 +11,11 @@ import warnings
 import os
 import inspect
 import h5py
-import scipy.signal.savgol_filter as sgolay
+
+from scipy.signal import savgol_filter as sgolay
+#Why didn't this work?
+#import scipy.signal.savgol_filter as sgolay
+#http://stackoverflow.com/questions/29324814/what-are-the-rules-for-importing-with-as-in-python-without-using-from
 
 from . import config
 from . import utils
@@ -33,11 +37,11 @@ class NormalizedWorm(object):
     -----------
       segmentation_status   
       frame_codes
-      vulva_contours        49 x 2 x n_frames
-      non_vulva_contours    49 x 2 x n_frames
-      skeletons : numpy.array
+      X vulva_contours        49 x 2 x n_frames
+      X non_vulva_contours    49 x 2 x n_frames
+      X skeletons : numpy.array
           - (49,2,n_frames)
-      angles : numpy.array
+      X angles : numpy.array
           - (49,n_frames)
       in_out_touches ????? 49 x n_frames
       lengths : numpy.array
@@ -110,330 +114,18 @@ class NormalizedWorm(object):
 
         """
 
-        #TODO: Get skeleton from contour????        
+        self.angles = WormParsing.calculateAngles
         
-        #For lengths, let's normalize the skeleton the compute the lengths ...
-        #
-        #        
+        #t = time.time()
+        self.skeletons = WormParsing.normalizeAllFramesXY(self,skeletons)   
+        self.vulva_contours = WormParsing.normalizeAllFramesXY(self,vulva_contours)
+        self.non_vulva_contours = WormParsing.normalizeAllFramesXY(self,non_vulva_contours)   
+        #elapsed = time.time() - t
         
-        def h__normalizeAllFramesXY(self,prop_to_normalize):
-            
-            n_frames = len(prop_to_normalize)
-            norm_data = np.full([self.N_POINTS_NORMALIZED,2,n_frames],np.NaN)
-            for iFrame, cur_frame_value in enumerate(prop_to_normalize):
-                if len(cur_frame_value) is not 0:
-                    sx = cur_frame_value[0,:]
-                    sy = cur_frame_value[1,:]
-                    cc = self._computeChainCodeLengths(sx,sy)
-                    norm_data[:,0,iFrame] = self._normalizeParameter(sx,cc)
-                    norm_data[:,1,iFrame] = self._normalizeParameter(sy,cc)
-            
-            return norm_data            
-       
-        def h__normalizeAllFrames(self,prop_to_normalize,xy_data):
-            
-            n_frames = len(prop_to_normalize)
-            norm_data = np.full([self.N_POINTS_NORMALIZED,n_frames],np.NaN)
-            for iFrame, (cur_frame_value,cur_xy) in enumerate(zip(prop_to_normalize,xy_data)):
-                if len(cur_frame_value) is not 0:
-                    sx = cur_xy[0,:]
-                    sy = cur_xy[1,:]
-                    cc = self._computeChainCodeLengths(sx,sy)
-                    norm_data[:,iFrame] = self._normalizeParameter(cur_frame_value,cc)
-            
-            return norm_data 
-        
-        
-        
-        
-            
-        n_frames = len(skeletons)    
-        #1) Normalizing the skeleton
-        #---------------------------
-        """
-        t = time.time()
-        self.skeletons = h__normalizeAllFramesXY(self,skeletons)        
-        
-        self.vulva_contours = h__normalizeAllFramesXY(self,vulva_contours)
-        self.non_vulva_contours = h__normalizeAllFramesXY(self,non_vulva_contours)        
-        
-        #1.59 seconds for old approach - without vectors
-        elapsed = time.time() - t
-        
-        
-        #2) Compute the skeleton lengths
-        #-------------------------------
-        #??? Do this on normalized or non-normalized data ???
-        #Currently done on normalized data
-        
-        #TODO: Merge this into _computeChainCodeLengths
-        dx = np.diff(self.skeletons[:,0,:],axis=0) #axis=1
-        dy = np.diff(self.skeletons[:,1,:],axis=0)
-        
-        distances = np.sqrt(dx**2 + dy**2)
-        
-        self.lengths = np.sum(distances,axis=0)
-        """
-        
-        
-        
-        #Angles
-        #----------------------------------
-        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/skeleton.m
-        #https://github.com/JimHokanson/SegwormMatlabClasses/tree/master/%2Bseg_worm/%2Bcv/curvature.m
-        #
-        #   Note, the above code is written for the non-normalized worm ...
-        #   edge_length= total_length/12
-        #
-        #   Importantly, the above approach calculates angles not between
-        #   neighboring pairs but over a longer stretch of pairs (pairs that
-        #   exceed the edge length). The net effect of this approach is to
-        #   smooth the angles
-        
-        #vertex index - first one where the distance from the tip to this point
-        #is greater than the edge length
-        
-        
-        #s = norm_data[]
-        
-        
-        #temp_s = np.full([self.N_POINTS_NORMALIZED,n_frames],np.NaN)
-        #for iFrame in range(n_frames):
-        #   temp_             
-            
-           
-        temp_angle_list = []
-                  
-        for iFrame, cur_frame_value in enumerate(skeletons):
-            if len(cur_frame_value) is 0:
-                temp_angle_list.append([])
-            else:
-                sx = cur_frame_value[0,:]
-                sy = cur_frame_value[1,:]
-                cc = self._computeChainCodeLengths(sx,sy)
-
-                #This is from the old code
-                edge_length = cc[-1]/12               
-                
-                #We want all vertices to be defined, and if we look starting
-                #at the left_I for a vertex, rather than vertex for left and right
-                #then we could miss all middle points on worms being vertices
-                
-                left_lengths = cc - edge_length
-                right_lengths = cc + edge_length
-
-                valid_vertices_I = utils.find((left_lengths > cc[0]) & (right_lengths < cc[-1]))
-                
-                left_lengths = left_lengths[valid_vertices_I]
-                right_lengths = right_lengths[valid_vertices_I]                
-                
-                left_x = np.interp(left_lengths,cc,sx)
-                left_y = np.interp(left_lengths,cc,sy)
-            
-                right_x = np.interp(right_lengths,cc,sx)
-                right_y = np.interp(right_lengths,cc,sy)
-
-                d2_y = sy[valid_vertices_I] - right_y
-                d2_x = sx[valid_vertices_I] - right_x
-                d1_y = left_y - sy[valid_vertices_I]
-                d1_x = left_x - sx[valid_vertices_I] 
-
-                frame_angles = np.arctan2(d2_y,d2_x) - np.arctan2(d1_y,d1_x)
-                
-                frame_angles[frame_angles > np.pi] -= 2*np.pi
-                frame_angles[frame_angles < -np.pi] += 2*np.pi
-                
-                frame_angles *= 180/np.pi
-                
-                all_frame_angles = np.full_like(cc,np.NaN)
-                all_frame_angles[valid_vertices_I] = frame_angles
-                
-                temp_angle_list.append(all_frame_angles)
-                
-        self.angles = h__normalizeAllFrames(self,temp_angle_list,skeletons)         
-       
+        self.lengths = WormParsing.computeSkeletonLengths(self,skeletons)
+  
         import pdb  
-       
-        
-        #Widths, v2:
-        #--------------------
-        temp_widths_list = [] 
-        for iFrame, (vc,nvc) in enumerate(zip(vulva_contours,non_vulva_contours)):       
-       
-            pdb.set_trace()       
-       
-        #Widths:
-        #------------------------------------
-        #The caller:
-        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/linearSkeleton.m
-        #see helper__skeletonize - callls seg_worm.cv.skeletonize
-        #
-        #
-        #Initial skeletonization:
-        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bcv/skeletonize.m
-        #
-        #Some refinement:
-        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/cleanSkeleton.m        
-        
-        #Widths are simply the distance between two "corresponding" sides of
-        #the contour. The question is how to get these two locations.                
-        
-        #Skeletonize code:
-        #- Go along from start to end
-        #- distance between points on contour 1 and contour 2, dnj1, dnj2
-        #
-        #   a   b  c  d
-        #   -   -  -  - 1
-        #    /  \d2
-        #   /d1  \
-        #   -   -  -  - 2
-        #   e  f g h
-        #
-        # dab - dnj1  - vector
-        # def - dnj2  - vector
-        # daf - d2    - distance
-        # deb - d1    - distance
-        # dbf - d12   - distance
-        #
-        #   Options:
-        #   1) advance along both contours, distance is between 2 next points
-        #   2) similar directions, distance is lesser of d1 or d2
-        #   3) opposite directions
-        #   
-          
-                
-          
-        temp_widths_list = []          
-          
-        for iFrame, (vc,nvc) in enumerate(zip(vulva_contours,non_vulva_contours)):
-            #vc [2,n]
-            #nvc [2,n]
-            
-            
-            """
-                import matplotlib.pyplot as plt
-                plt.scatter(vc[0,:],vc[1,:])
-                plt.scatter(nvc[0,:],nvc[1,:])
-                plt.gca().set_aspect('equal', adjustable='box')
-                plt.show()
-                
-                plt.plot(x_plot,y_plot)
-                plt.show()
-            """            
-            
-            #TODO: Make sure to bound
-            cur_output_I = 0
-            
-            vc_I  = int(1)
-            nvc_I = int(1)
-            n_points = vc.shape[1]
-            contour_widths = np.zeros(n_points*2)
-            
-            cur_xy_I = -3
-            x_plot = np.full(n_points*5,np.NaN)
-            y_plot = np.full(n_points*5,np.NaN)
-            x_plot2 = np.full(n_points*5,np.NaN)
-            y_plot2 = np.full(n_points*5,np.NaN)
-            x_plot3 = np.full(n_points*5,np.NaN)
-            y_plot3 = np.full(n_points*5,np.NaN)
-            
-            while (nvc_I != (n_points-2)) and (vc_I != (n_points-2)):
-                cur_xy_I += 3 #skip a NaN too
-                cur_output_I += 1             
-             
-                next_vc_I  = vc_I + 1
-                next_nvc_I = nvc_I + 1
-                
-                if next_vc_I == 215:
-                    pdb.set_trace()
-                v_vc   = vc[:,next_vc_I] - vc[:,vc_I]     #dnj1
-                v_nvc  = nvc[:,next_nvc_I] - nvc[:,nvc_I] #dnj2
-                d_next = np.sum((vc[:,next_vc_I]-nvc[:,next_nvc_I])**2) #d12
-                d_vc   = np.sum((vc[:,next_vc_I]-nvc[:,nvc_I])**2) #d1
-                d_nvc  = np.sum((vc[:,next_nvc_I]-nvc[:,vc_I])**2) #d2 - nvc
-              
-                #(d_vc == d_nvc) or 
-                if ((d_next <= d_vc) and (d_next <= d_nvc)):
-                    vc_I = next_vc_I
-                    nvc_I = next_nvc_I
-                    contour_widths[cur_output_I] = np.sqrt(d_next)
-                    
-                    x_plot[cur_xy_I] = vc[0,vc_I]
-                    y_plot[cur_xy_I] = vc[1,vc_I]   
-                    x_plot[cur_xy_I+1] = nvc[0,nvc_I]
-                    y_plot[cur_xy_I+1] = nvc[1,nvc_I]
-                    
-                    
-                elif np.all((v_vc*v_nvc) >= 0):
-                #contours go in similar directions
-                #
-                #Multiplication is checking that we have +*+ or -*- or 
-                #a zero or two thrown in there (for the x & ys)
-                #
-                #NOTE: in general we want the smallest width as this is indicative
-                #of being orthogonal to the direction of the body where
-                #as going across the body at an angle will increase the apparent 
-                #width (indicating that the larger width is not appropriate)
-                
-                    if d_vc < d_nvc:
-                        vc_I = next_vc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_vc)
-                        
-                        x_plot2[cur_xy_I] = vc[0,next_vc_I]
-                        y_plot2[cur_xy_I] = vc[1,next_vc_I]   
-                        x_plot2[cur_xy_I+1] = nvc[0,nvc_I]
-                        y_plot2[cur_xy_I+1] = nvc[1,nvc_I]                        
-                        
-                        
-                    else:
-                        nvc_I = next_nvc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
-
-                        x_plot3[cur_xy_I] = vc[0,next_vc_I]
-                        y_plot3[cur_xy_I] = vc[1,next_vc_I]   
-                        x_plot3[cur_xy_I+1] = nvc[0,nvc_I]
-                        y_plot3[cur_xy_I+1] = nvc[1,nvc_I] 
-                        
-                else:        
-                # The contours go in opposite directions.
-                # Follow decreasing widths or walk along both contours.
-                # In other words, catch up both contours, then walk along both.
-                # Note: this step negotiates hairpin turns and bulges.                        
-                    prev_width = contour_widths[cur_output_I]**2
-                    if ((d_next <= d_vc) and (d_next <= d_nvc)) or ((d_vc > prev_width) and (d_nvc > prev_width)):
-                        vc_I = next_vc_I
-                        nvc_I = next_nvc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_next)  
-                    elif d_vc < d_nvc:
-                        vc_I = next_vc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_vc)
-                    else:
-                        nvc_I = next_nvc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
-                        
-                    
-                temp_widths_list.append(contour_widths)    
-              
-              
-            """
-            plt.plot(x_plot2,y_plot2,color='b')
-            plt.plot(x_plot,y_plot,color='r')
-            plt.plot(x_plot3,y_plot3,color='g')
-            plt.show()
-            
-            """
-              
-            pdb.set_trace()
-              
-              
-            #I1 = 1
-            #I2 = 1
-            
-            #e1 = vc.shape[1]-2
-            #e2
-            #import pdb
-            #pdb.set_trace()
-        
+        pdb.set_trace()  
         
         """
         From Ev's Thesis:
@@ -483,84 +175,9 @@ class NormalizedWorm(object):
         import pdb
         pdb.set_trace()
     
-    def _computeChainCodeLengths(self,x,y):
-        """
-        Calculate the distance between a set of points and then calculate
-        their cumulative distance from the first point.
-        
-        The first value returned has a value of 0 by definition.
-        """
-        
-        #TODO: Should handle empty set - remove adding 0 as first element        
-        
-        #TODO: We need this for lengths as well, but the matrix vs vector 
-        #complicates things
-        
-        dx = np.diff(x)
-        dy = np.diff(y)
-        
-        distances = np.concatenate([np.array([0.0]), np.sqrt(dx**2 + dy**2)])
-        return np.cumsum(distances)
+
     
-    def _normalizeParameter(self,orig_data,old_lengths):
-        """
-        
-        This function finds where all of the new points will be when evenly
-        sampled (in terms of chain code length) from the first to the last 
-        point in the old data.
-
-        These points are then related to the old points. If a new points is at
-        an old point, the old point data value is used. If it is between two
-        old points, then linear interpolation is used to determine the new value
-        based on the neighboring old values.
-
-        NOTE: For better or worse, this approach does not smooth the new data
-        
-        Old Code:
-        https://github.com/openworm/SegWorm/blob/master/ComputerVision/chainCodeLengthInterp.m  
-        
-        Parameters:
-        -----------
-        non_normalizied_data :
-            - ()
-        """
-        
-        
-        #TODO: Might just replace all of this with an interpolation call
-        
-        new_lengths = np.linspace(old_lengths[0],old_lengths[-1],self.N_POINTS_NORMALIZED)
-        
-        #For each point, get the bordering points
-        #Sort, with old coming before new
-        I = np.argsort(np.concatenate([old_lengths, new_lengths]), kind='mergesort')
-        #Find new points, an old point will be to the left
-        new_I = utils.find(I >= len(old_lengths)) #indices 0 to n-1, look for >= not >
-        
-        norm_data = np.empty_like(new_lengths)        
-        
-        #Can we do this without a loop (YES!)
-        #find those that are equal
-        #those that are not equal (at an old point) then do vector math        
-
-        for iSeg,cur_new_I in enumerate(new_I):
-            cur_left_I = I[cur_new_I-1]
-            cur_right_I = cur_left_I + 1
-            if iSeg == 0 or (iSeg == len(new_lengths) - 1) or (new_lengths[iSeg] == old_lengths[cur_left_I]):
-                norm_data[iSeg] = orig_data[cur_left_I]
-            else:
-                new_position = new_lengths[iSeg]
-                left_position = old_lengths[cur_left_I]
-                right_position = old_lengths[cur_right_I]                    
-                total_length = right_position - left_position
-                #NOTE: If we are really close to left, then we want mostly
-                #left, which means right_position - new_position will almost
-                #be equal to the total length, and left_pct will be close to 1
-                left_pct = (right_position - new_position)/total_length
-                right_pct = (new_position - left_position)/total_length
-                norm_data[iSeg] = left_pct*orig_data[cur_left_I] + right_pct*orig_data[cur_right_I]
-
-
-        return norm_data
+    
 
 
     @classmethod
@@ -1012,7 +629,424 @@ class NormalizedWorm(object):
         #TODO: This omits the properties above ...
         return utils.print_object(self)
 
+class WormParsing(object):
+
+    """
+    This might eventually move somewhere else, but at least it is contained within
+    the class. It was originally in the Normalized Worm code which was making things
+    a bit overwhelming.
+    
+    TODO: Self does not refer to WormParsing ...
+    
+    """
+
+    @staticmethod
+    def h__roundToOdd(value):
+        value = np.floor(value)
+        if value % 2 == 0:
+            value = value + 1
+
+
+    @staticmethod
+    def computeWidths(nw,vulva_contours,non_vulva_contours):
+        """
+        
+        """        
+
+        import pdb
+        pdb.set_trace()
+
+        FRACTION_WORM_SMOOTH = 1.0/12.0
+
+        n_frames = len(vulva_contours)
+        data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
+
+        for iFrame, (s1,s2) in enumerate(zip(vulva_contours,non_vulva_contours)):
+            
+            # * I'm writing the code based on awesome_contours_oh_yeah_v2
+            #   in Jim's testing folder            
+            
+            pass        
+            
+            #Step 1: filter
+            filter_width_s1 = h__roundToOdd(len(s1)*FRACTION_WORM_SMOOTH)    
+
+
+        #Widths:
+        #------------------------------------
+        #The caller:
+        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/linearSkeleton.m
+        #see helper__skeletonize - callls seg_worm.cv.skeletonize
+        #
+        #
+        #Initial skeletonization:
+        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bcv/skeletonize.m
+        #
+        #Some refinement:
+        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/cleanSkeleton.m        
+        
+        #Widths are simply the distance between two "corresponding" sides of
+        #the contour. The question is how to get these two locations.                
+        
+        #Skeletonize code:
+        #- Go along from start to end
+        #- distance between points on contour 1 and contour 2, dnj1, dnj2
+        #
+        #   a   b  c  d
+        #   -   -  -  - 1
+        #    /  \d2
+        #   /d1  \
+        #   -   -  -  - 2
+        #   e  f g h
+        #
+        # dab - dnj1  - vector
+        # def - dnj2  - vector
+        # daf - d2    - distance
+        # deb - d1    - distance
+        # dbf - d12   - distance
+        #
+        #   Options:
+        #   1) advance along both contours, distance is between 2 next points
+        #   2) similar directions, distance is lesser of d1 or d2
+        #   3) opposite directions
+        #   
+          
+                
+          
+        temp_widths_list = []          
+          
+        for iFrame, (vc,nvc) in enumerate(zip(vulva_contours,non_vulva_contours)):
+            #vc [2,n]
+            #nvc [2,n]
+            
+
+#                import matplotlib.pyplot as plt
+#                plt.scatter(vc[0,:],vc[1,:])
+#                plt.scatter(nvc[0,:],nvc[1,:])
+#                plt.gca().set_aspect('equal', adjustable='box')
+#                plt.show()
+#                
+#                plt.plot(x_plot,y_plot)
+#                plt.show()
+            
+            """
+            #TODO: Make sure to bound
+            cur_output_I = 0
+            
+            vc_I  = int(1)
+            nvc_I = int(1)
+            n_points = vc.shape[1]
+            contour_widths = np.zeros(n_points*2)
+            
+            cur_xy_I = -3
+            x_plot = np.full(n_points*5,np.NaN)
+            y_plot = np.full(n_points*5,np.NaN)
+            x_plot2 = np.full(n_points*5,np.NaN)
+            y_plot2 = np.full(n_points*5,np.NaN)
+            x_plot3 = np.full(n_points*5,np.NaN)
+            y_plot3 = np.full(n_points*5,np.NaN)
+            
+            while (nvc_I != (n_points-2)) and (vc_I != (n_points-2)):
+                cur_xy_I += 3 #skip a NaN too
+                cur_output_I += 1             
+             
+                next_vc_I  = vc_I + 1
+                next_nvc_I = nvc_I + 1
+                
+                if next_vc_I == 215:
+                    pdb.set_trace()
+                v_vc   = vc[:,next_vc_I] - vc[:,vc_I]     #dnj1
+                v_nvc  = nvc[:,next_nvc_I] - nvc[:,nvc_I] #dnj2
+                d_next = np.sum((vc[:,next_vc_I]-nvc[:,next_nvc_I])**2) #d12
+                d_vc   = np.sum((vc[:,next_vc_I]-nvc[:,nvc_I])**2) #d1
+                d_nvc  = np.sum((vc[:,next_nvc_I]-nvc[:,vc_I])**2) #d2 - nvc
+              
+                #(d_vc == d_nvc) or 
+                if ((d_next <= d_vc) and (d_next <= d_nvc)):
+                    vc_I = next_vc_I
+                    nvc_I = next_nvc_I
+                    contour_widths[cur_output_I] = np.sqrt(d_next)
+                    
+                    x_plot[cur_xy_I] = vc[0,vc_I]
+                    y_plot[cur_xy_I] = vc[1,vc_I]   
+                    x_plot[cur_xy_I+1] = nvc[0,nvc_I]
+                    y_plot[cur_xy_I+1] = nvc[1,nvc_I]
+                    
+                    
+                elif np.all((v_vc*v_nvc) >= 0):
+                #contours go in similar directions
+                #
+                #Multiplication is checking that we have +*+ or -*- or 
+                #a zero or two thrown in there (for the x & ys)
+                #
+                #NOTE: in general we want the smallest width as this is indicative
+                #of being orthogonal to the direction of the body where
+                #as going across the body at an angle will increase the apparent 
+                #width (indicating that the larger width is not appropriate)
+                
+                    if d_vc < d_nvc:
+                        vc_I = next_vc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_vc)
+                        
+                        x_plot2[cur_xy_I] = vc[0,next_vc_I]
+                        y_plot2[cur_xy_I] = vc[1,next_vc_I]   
+                        x_plot2[cur_xy_I+1] = nvc[0,nvc_I]
+                        y_plot2[cur_xy_I+1] = nvc[1,nvc_I]                        
+                        
+                        
+                    else:
+                        nvc_I = next_nvc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
+
+                        x_plot3[cur_xy_I] = vc[0,next_vc_I]
+                        y_plot3[cur_xy_I] = vc[1,next_vc_I]   
+                        x_plot3[cur_xy_I+1] = nvc[0,nvc_I]
+                        y_plot3[cur_xy_I+1] = nvc[1,nvc_I] 
+                        
+                else:        
+                # The contours go in opposite directions.
+                # Follow decreasing widths or walk along both contours.
+                # In other words, catch up both contours, then walk along both.
+                # Note: this step negotiates hairpin turns and bulges.                        
+                    prev_width = contour_widths[cur_output_I]**2
+                    if ((d_next <= d_vc) and (d_next <= d_nvc)) or ((d_vc > prev_width) and (d_nvc > prev_width)):
+                        vc_I = next_vc_I
+                        nvc_I = next_nvc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_next)  
+                    elif d_vc < d_nvc:
+                        vc_I = next_vc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_vc)
+                    else:
+                        nvc_I = next_nvc_I
+                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
+                        
+                    
+                temp_widths_list.append(contour_widths)    
+            """
+
+
+
+    @staticmethod
+    def computeSkeletonLengths(nw,xy_all):
+        """
+
+        Computes the running length (cumulative distance from start - head?) 
+        for each skeleton.
+        
+        
+        Parameters
+        ----------
+        xy_all : [numpy.array]
+            Contains the skeleton positions for each frame.
+            List length: # of frames
+            Each element contains a numpy array of size [n_points x 2]
+            Skeleton 
+        """
+        n_frames = len(xy_all)
+        data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
+        for iFrame, cur_xy in enumerate(xy_all):
+            if len(cur_xy) is not 0:
+                sx = cur_xy[0,:]
+                sy = cur_xy[1,:]
+                cc = WormParsing.computeChainCodeLengths(sx,sy)
+                data[:,iFrame] = WormParsing.normalizeParameter(nw,cc,cc)
+                
+        return data
+
+    @staticmethod
+    def computeChainCodeLengths(x,y):
+        """
+        Calculate the distance between a set of points and then calculate
+        their cumulative distance from the first point.
+        
+        The first value returned has a value of 0 by definition.
+        """
+        
+        #TODO: Should handle empty set - remove adding 0 as first element        
+        
+        #TODO: We need this for lengths as well, but the matrix vs vector 
+        #complicates things
+        
+        dx = np.diff(x)
+        dy = np.diff(y)
+        
+        distances = np.concatenate([np.array([0.0]), np.sqrt(dx**2 + dy**2)])
+        return np.cumsum(distances)
+
+    @staticmethod
+    def normalizeAllFramesXY(nw,prop_to_normalize):
+            
+        n_frames = len(prop_to_normalize)
+        norm_data = np.full([nw.N_POINTS_NORMALIZED,2,n_frames],np.NaN)
+        for iFrame, cur_frame_value in enumerate(prop_to_normalize):
+            if len(cur_frame_value) is not 0:
+                sx = cur_frame_value[0,:]
+                sy = cur_frame_value[1,:]
+                cc = WormParsing.computeChainCodeLengths(sx,sy)
+                norm_data[:,0,iFrame] = WormParsing.normalizeParameter(nw,sx,cc)
+                norm_data[:,1,iFrame] = WormParsing.normalizeParameter(nw,sy,cc)
+        
+        return norm_data            
+    
+    @staticmethod
+    def normalizeAllFrames(nw,prop_to_normalize,xy_data):
+            
+        n_frames = len(prop_to_normalize)
+        norm_data = np.full([self.N_POINTS_NORMALIZED,n_frames],np.NaN)
+        for iFrame, (cur_frame_value,cur_xy) in enumerate(zip(prop_to_normalize,xy_data)):
+            if len(cur_frame_value) is not 0:
+                sx = cur_xy[0,:]
+                sy = cur_xy[1,:]
+                cc = WormParsing.computeChainCodeLengths(sx,sy)
+                norm_data[:,iFrame] = WormParsing.normalizeParameter(nw,cur_frame_value,cc)
+        
+        return norm_data 
+
+    @staticmethod
+    def calculateAngles(self,skeletons):
+    
+        """
+        #Angles
+        #----------------------------------
+        #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/skeleton.m
+        #https://github.com/JimHokanson/SegwormMatlabClasses/tree/master/%2Bseg_worm/%2Bcv/curvature.m
+        #
+        #   Note, the above code is written for the non-normalized worm ...
+        #   edge_length= total_length/12
+        #
+        #   Importantly, the above approach calculates angles not between
+        #   neighboring pairs but over a longer stretch of pairs (pairs that
+        #   exceed the edge length). The net effect of this approach is to
+        #   smooth the angles
+        
+        #vertex index - first one where the distance from the tip to this point
+        #is greater than the edge length
+        
+        
+        #s = norm_data[]
+        
+        
+        #temp_s = np.full([self.N_POINTS_NORMALIZED,n_frames],np.NaN)
+        #for iFrame in range(n_frames):
+        #   temp_   
+        """                  
+
+        temp_angle_list = []
+                      
+        for iFrame, cur_frame_value in enumerate(skeletons):
+            if len(cur_frame_value) is 0:
+                temp_angle_list.append([])
+            else:
+                sx = cur_frame_value[0,:]
+                sy = cur_frame_value[1,:]
+                cc = self._computeChainCodeLengths(sx,sy)
+    
+                #This is from the old code
+                edge_length = cc[-1]/12               
+                
+                #We want all vertices to be defined, and if we look starting
+                #at the left_I for a vertex, rather than vertex for left and right
+                #then we could miss all middle points on worms being vertices
+                
+                left_lengths = cc - edge_length
+                right_lengths = cc + edge_length
+    
+                valid_vertices_I = utils.find((left_lengths > cc[0]) & (right_lengths < cc[-1]))
+                
+                left_lengths = left_lengths[valid_vertices_I]
+                right_lengths = right_lengths[valid_vertices_I]                
+                
+                left_x = np.interp(left_lengths,cc,sx)
+                left_y = np.interp(left_lengths,cc,sy)
+            
+                right_x = np.interp(right_lengths,cc,sx)
+                right_y = np.interp(right_lengths,cc,sy)
+    
+                d2_y = sy[valid_vertices_I] - right_y
+                d2_x = sx[valid_vertices_I] - right_x
+                d1_y = left_y - sy[valid_vertices_I]
+                d1_x = left_x - sx[valid_vertices_I] 
+    
+                frame_angles = np.arctan2(d2_y,d2_x) - np.arctan2(d1_y,d1_x)
+                
+                frame_angles[frame_angles > np.pi] -= 2*np.pi
+                frame_angles[frame_angles < -np.pi] += 2*np.pi
+                
+                frame_angles *= 180/np.pi
+                
+                all_frame_angles = np.full_like(cc,np.NaN)
+                all_frame_angles[valid_vertices_I] = frame_angles
+                
+                temp_angle_list.append(all_frame_angles)
+                
+        return WormParsing.normalizeAllFrames(self,temp_angle_list,skeletons)
+    
+    @staticmethod
+    def normalizeParameter(self,orig_data,old_lengths):
+        """
+        
+        This function finds where all of the new points will be when evenly
+        sampled (in terms of chain code length) from the first to the last 
+        point in the old data.
+
+        These points are then related to the old points. If a new points is at
+        an old point, the old point data value is used. If it is between two
+        old points, then linear interpolation is used to determine the new value
+        based on the neighboring old values.
+
+        NOTE: For better or worse, this approach does not smooth the new data
+        
+        Old Code:
+        https://github.com/openworm/SegWorm/blob/master/ComputerVision/chainCodeLengthInterp.m  
+        
+        Parameters:
+        -----------
+        non_normalizied_data :
+            - ()
+        """
+        
+        
+        #TODO: Might just replace all of this with an interpolation call
+        
+        new_lengths = np.linspace(old_lengths[0],old_lengths[-1],self.N_POINTS_NORMALIZED)
+        
+        #For each point, get the bordering points
+        #Sort, with old coming before new
+        I = np.argsort(np.concatenate([old_lengths, new_lengths]), kind='mergesort')
+        #Find new points, an old point will be to the left
+        new_I = utils.find(I >= len(old_lengths)) #indices 0 to n-1, look for >= not >
+        
+        norm_data = np.empty_like(new_lengths)        
+        
+        #Can we do this without a loop (YES!)
+        #find those that are equal
+        #those that are not equal (at an old point) then do vector math        
+
+        for iSeg,cur_new_I in enumerate(new_I):
+            cur_left_I = I[cur_new_I-1]
+            cur_right_I = cur_left_I + 1
+            if iSeg == 0 or (iSeg == len(new_lengths) - 1) or (new_lengths[iSeg] == old_lengths[cur_left_I]):
+                norm_data[iSeg] = orig_data[cur_left_I]
+            else:
+                new_position = new_lengths[iSeg]
+                left_position = old_lengths[cur_left_I]
+                right_position = old_lengths[cur_right_I]                    
+                total_length = right_position - left_position
+                #NOTE: If we are really close to left, then we want mostly
+                #left, which means right_position - new_position will almost
+                #be equal to the total length, and left_pct will be close to 1
+                left_pct = (right_position - new_position)/total_length
+                right_pct = (new_position - left_position)/total_length
+                norm_data[iSeg] = left_pct*orig_data[cur_left_I] + right_pct*orig_data[cur_right_I]
+
+
+        return norm_data        
 
 class SkeletonPartitions(object):
+    
+    """
+    The idea with this class was to move details regarding how the worm can be
+    divided up 
+    """
     #TODO: This needs to be implemented
     pass
