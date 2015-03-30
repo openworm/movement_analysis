@@ -116,6 +116,9 @@ class NormalizedWorm(object):
 
         self.angles = WormParsing.calculateAngles
         
+        #TODO: Do I want to grab the skeletons from here????
+        widths = WormParsing.computeWidths(self,vulva_contours,non_vulva_contours)            
+        
         #t = time.time()
         self.skeletons = WormParsing.normalizeAllFramesXY(self,skeletons)   
         self.vulva_contours = WormParsing.normalizeAllFramesXY(self,vulva_contours)
@@ -126,6 +129,9 @@ class NormalizedWorm(object):
   
         import pdb  
         pdb.set_trace()  
+        
+    
+        
         
         """
         From Ev's Thesis:
@@ -641,36 +647,57 @@ class WormParsing(object):
     """
 
     @staticmethod
+    def h__computeNormalVectors(data):
+        dx = np.gradient(data[:,0])
+        dy = np.gradient(data[:,1])
+        
+        #This approach gives us -1 for the projection
+        #We could also use:
+        #dx_norm = -dy;
+        #dy_norm = dx;
+        #
+        #and we would get 1 for the projection
+        dx_norm = dy;
+        dy_norm = -dx;
+        
+        vc_d_magnitude = np.sqrt(dx_norm**2 + dy_norm**2);
+        
+        norm_x = dx_norm/vc_d_magnitude;
+        norm_y = dy_norm/vc_d_magnitude;
+        
+        return norm_x,norm_y
+
+    @staticmethod
     def h__roundToOdd(value):
         value = np.floor(value)
         if value % 2 == 0:
             value = value + 1
+            
+        return value
 
+    @staticmethod
+    def h__getBounds(n1,n2,p_left,p_right):
+        """
+        
+        Returns slice starts and stops
+        #TODO: Rename everything to start and stop
+        """
+        pct = np.linspace(0,1,n1);
+        left_pct = pct - p_left;
+        right_pct = pct + p_right;
+
+        left_I = np.floor(left_pct*n2);
+        right_I = np.ceil(right_pct*n2);
+        left_I[left_I < 0] = 0;
+        right_I[right_I >= n2] = n2-1;
+        right_I += 1
+        return left_I,right_I
 
     @staticmethod
     def computeWidths(nw,vulva_contours,non_vulva_contours):
         """
         
         """        
-
-        import pdb
-        pdb.set_trace()
-
-        FRACTION_WORM_SMOOTH = 1.0/12.0
-
-        n_frames = len(vulva_contours)
-        data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
-
-        for iFrame, (s1,s2) in enumerate(zip(vulva_contours,non_vulva_contours)):
-            
-            # * I'm writing the code based on awesome_contours_oh_yeah_v2
-            #   in Jim's testing folder            
-            
-            pass        
-            
-            #Step 1: filter
-            filter_width_s1 = h__roundToOdd(len(s1)*FRACTION_WORM_SMOOTH)    
-
 
         #Widths:
         #------------------------------------
@@ -686,39 +713,63 @@ class WormParsing(object):
         #https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bworm/%40skeleton/cleanSkeleton.m        
         
         #Widths are simply the distance between two "corresponding" sides of
-        #the contour. The question is how to get these two locations.                
+        #the contour. The question is how to get these two locations. 
+
+        FRACTION_WORM_SMOOTH = 1.0/12.0
+        SMOOTHING_ORDER = 3
+        PERCENT_BACK_SEARCH = 0.3;
+        PERCENT_FORWARD_SEARCH = 0.3;
+        END_S1_WALK_PCT = 0.15;
         
-        #Skeletonize code:
-        #- Go along from start to end
-        #- distance between points on contour 1 and contour 2, dnj1, dnj2
-        #
-        #   a   b  c  d
-        #   -   -  -  - 1
-        #    /  \d2
-        #   /d1  \
-        #   -   -  -  - 2
-        #   e  f g h
-        #
-        # dab - dnj1  - vector
-        # def - dnj2  - vector
-        # daf - d2    - distance
-        # deb - d1    - distance
-        # dbf - d12   - distance
-        #
-        #   Options:
-        #   1) advance along both contours, distance is between 2 next points
-        #   2) similar directions, distance is lesser of d1 or d2
-        #   3) opposite directions
-        #   
+
+        n_frames = len(vulva_contours)
+        data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
+
+        for iFrame, (s1,s2) in enumerate(zip(vulva_contours,non_vulva_contours)):
+            
+            # * I'm writing the code based on awesome_contours_oh_yeah_v2
+            #   in Jim's testing folder            
+            
+            #Step 1: filter
+            filter_width_s1 = WormParsing.h__roundToOdd(s1.shape[1]*FRACTION_WORM_SMOOTH)    
+            s1[0,:] = sgolay(s1[0,:],filter_width_s1,SMOOTHING_ORDER)
+            s1[1,:] = sgolay(s1[1,:],filter_width_s1,SMOOTHING_ORDER)
+
+            filter_width_s2 = WormParsing.h__roundToOdd(s2.shape[1]*FRACTION_WORM_SMOOTH)    
+            s2[0,:] = sgolay(s2[0,:],filter_width_s2,SMOOTHING_ORDER)
+            s2[1,:] = sgolay(s2[1,:],filter_width_s2,SMOOTHING_ORDER)
+
+            #TODO: Allow downsampling if the # of points is rediculous
+            #200 points seems to be a good #
+            #This operation gives us a matrix that is len(s1) x len(s2)
+            dx_across = np.transpose(s1[0:1,:]) - s2[0,:]
+            dy_across = np.transpose(s1[1:2,:]) - s2[1,:]
+            d_across = np.sqrt(dx_across**2 + dy_across**2)
+            dx_across = dx_across/d_across
+            dy_across = dy_across/d_across
+            
+            #All s1 matching to s2
+            #---------------------------------------
+            left_I,right_I = WormParsing.h__getBounds(s1.shape[1],s2.shape[1],PERCENT_BACK_SEARCH,PERCENT_FORWARD_SEARCH)
+            
+            #%For each point on side 1, calculate normalized orthogonal values
+            norm_x,norm_y = WormParsing.h__computeNormalVectors(s1)
+
+            import pdb
+            pdb.set_trace()
+            
+            #JAH: At this point, below is not implemented            
+            
+            #%For each point on side 1, find which side 2 the point pairs with
+            dp_values1,match_I1 = WormParsing.h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I)
+
+
+
+               
+        
+
           
                 
-          
-        temp_widths_list = []          
-          
-        for iFrame, (vc,nvc) in enumerate(zip(vulva_contours,non_vulva_contours)):
-            #vc [2,n]
-            #nvc [2,n]
-            
 
 #                import matplotlib.pyplot as plt
 #                plt.scatter(vc[0,:],vc[1,:])
