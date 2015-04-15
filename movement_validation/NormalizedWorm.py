@@ -648,8 +648,8 @@ class WormParsing(object):
 
     @staticmethod
     def h__computeNormalVectors(data):
-        dx = np.gradient(data[:,0])
-        dy = np.gradient(data[:,1])
+        dx = np.gradient(data[0,:])
+        dy = np.gradient(data[1,:])
         
         #This approach gives us -1 for the projection
         #We could also use:
@@ -692,6 +692,233 @@ class WormParsing(object):
         right_I[right_I >= n2] = n2-1;
         right_I += 1
         return left_I,right_I
+    
+    @staticmethod
+    def h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I):
+        
+        n_s1 = s1.shape[1]
+        match_I = np.zeros(n_s1)
+        match_I[0] = 0
+        match_I[-1] = s2.shape[1]
+        
+        dp_values = np.ones(n_s1)
+        #Why do I do this? It might not be necessary
+        dp_values[0] = -1
+        dp_values[-1] = -1
+        
+        for I,(lb,rb) in enumerate(zip(left_I,right_I)):
+            
+#            try:
+            [abs_dp_value,dp_I] = WormParsing.h__getProjectionIndex(norm_x[I],norm_y[I],dx_across[I,lb:rb],dy_across[I,lb:rb],lb,d_across[I,lb:rb])
+            dp_values[I] = abs_dp_value
+            match_I[I] = dp_I
+#            except:
+#                #   print "Unexpected error:", sys.exc_info()[0]
+#                import pdb
+#                pdb.set_trace()
+            
+
+
+
+        return (dp_values,match_I)
+    
+    @staticmethod
+    def h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_worm,dy_across_worm,left_I,d_across):
+        
+        
+        #% nvc_local = nvc(nvc_indices_use,:);
+        #%
+        #% dx_across_worm = cur_point(1) - nvc_local(:,1);
+        #% dy_across_worm = cur_point(2) - nvc_local(:,2);
+        #%
+        #% d_magnitude = sqrt(dx_across_worm.^2+dy_across_worm.^2);
+        #%
+        #% dx_across_worm = dx_across_worm./d_magnitude;
+        #% dy_across_worm = dy_across_worm./d_magnitude;
+
+                
+        #SPEED: Compute normalized distances for all pairs ...
+        #Might need to downsample
+        
+        dp = dx_across_worm*vc_dx_ortho + dy_across_worm*vc_dy_ortho;
+        
+        #I'd like to not have to do this step, it has to do with the relationship
+        #between the vulva and non-vulva side. This should be consistent across the
+        #entire animal and could be passed in, unless the worm rolls.
+        if np.sum(dp) > 0:
+            #Instead of multiplying by -1 we could hardcode the flip of the logic
+            #below (e.g. max instead of min, > vs <)
+            dp = -1*dp
+        
+        #This is slow, presumably due to the memory allocation ...
+        #               < right                         < left
+        #possible = [dp(1:end-1) < dp(2:end) false] & [false dp(2:end) < dp(1:end-1)];
+        
+        #In Matlab
+        #possible = (dp(2:end-1) < dp(3:end)) & (dp(2:end-1) < dp(1:end-2));
+        possible = (dp[1:-2] < dp[2:-1]) & (dp[1:-2] < dp[0:-3])
+        
+        Ip = utils.find(possible)
+        if len(Ip) == 1:
+            dp_I = Ip+1
+            dp_value = dp[dp_I]
+        elif len(Ip) > 1:
+            temp_I = np.argmin(d_across[Ip])
+            dp_I = Ip[temp_I]+1
+            dp_value = dp[dp_I]
+        else:
+            dp_I = np.argmin(dp)
+            dp_value = dp[dp_I]
+        
+        I = left_I + dp_I - 1
+    
+        return (dp_value,I)
+    
+    @staticmethod
+    def h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT):
+
+        end_s1_walk_I = np.ceil(len(s1)*END_S1_WALK_PCT)
+        end_s2_walk_I = 2*end_s1_walk_I
+        p1_I,p2_I = WormParsing.h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2)
+        
+        match_I1[p1_I] = p2_I
+        
+        keep_mask = np.zeros(len(match_I1),dtype=np.bool)
+        keep_mask[p1_I] = True
+        
+        n_s1 = len(s1)
+        n_s2 = len(s2)
+        end_s1_walk_backwards = n_s1 - end_s1_walk_I + 1
+        end_s2_walk_backwards = n_s2 - end_s2_walk_I + 1
+        
+        
+        p1_I,p2_I = WormParsing.h__getPartnersViaWalk(n_s1,end_s1_walk_backwards,n_s2,end_s2_walk_backwards,d_across,s1,s2)
+        match_I1[p1_I] = p2_I
+        keep_mask[p1_I] = True
+        
+        #anything in between we'll use the projection appproach
+        keep_mask[end_s1_walk_I+1:end_s1_walk_backwards] = True
+        
+        #Always keep ends
+        keep_mask[0]   = True
+        keep_mask[-1] = True
+    
+        match_I1[0] = 1;
+        match_I1[-1] = length(s2)
+        
+    
+        #This isn't perfect but it removes some back and forth behavior
+        #of the matching. We'd rather drop points and smooth
+        I_1 = utils.find(keep_mask);
+        I_2 = match_I1[keep_mask];
+
+        return (I1,I2)
+        
+    @staticmethod
+    def h__getPartnersViaWalk(s1,e1,s2,e2,d,xy1,xy2):
+    #%
+    #%   s1: start index for side 1
+    #%   e1: end index for side 1
+    #%
+    #%   d :
+    #%       distance from I1 to I2 is d(I1,I2)
+    #%
+    #%   d1 : [n x 2]
+    #%       x,y pairs for side 1
+    #%
+    #%
+    #%
+
+
+        #TODO: remove hardcode
+        p1_I = np.zeros(200)
+        p2_I = np.zeros(200)
+    
+        c1 = s1 #current 1 index
+        c2 = s2 #current 2 index
+        cur_p_I = 0 #current pair index
+    
+    
+        while c1 != e1 and c2 != e2:
+            cur_p_I += 1
+            
+            if e1 < s1:
+                next1 = c1-1
+                next2 = c2-1        
+            else:
+                next1 = c1+1
+                next2 = c2+1
+            
+            import pdb
+            pdb.set_trace()
+            
+            #JAH: At this point
+            #Need to handle indexing () vs [] and indexing spans (if any)
+            #as well as 0 vs 1 based indexing (if any)
+            v_n1c1 = xy1(next1,:) - xy1(c1,:)
+            v_n2c2 = xy2(next2,:) - xy2(c2,:)
+            
+            d_n1n2 = d(next1,next2)
+            d_n1c2 = d(next1,c2)
+            d_n2c1 = d(c1,next2)
+            
+            
+            if d_n1c2 == d_n2c1 || (d_n1n2 <= d_n1c2 && d_n1n2 <= d_n2c1):
+                #Advance along both contours
+                
+                p1_I(cur_p_I) = next1;
+                p2_I(cur_p_I) = next2;
+                
+                c1 = next1;
+                c2 = next2;
+                
+            elif np.all((v_n1c1.*v_n2c2) > -1):
+                #contours go similar directions
+                #follow smallest width
+                if d_n1c2 < d_n2c1:
+                    #consume smaller distance, then move the base of the vector
+                    #further forward
+                    p1_I(cur_p_I) = next1
+                    p2_I(cur_p_I) = c2
+                    
+                    #This bit always confuses me
+                    #c1  n1
+                    #
+                    #
+                    #c2  x  x  x  n2
+                    #
+                    #Advance c1 so that d_n2_to_c1 is smaller next time
+                    c1 = next1
+                else:
+                    p1_I(cur_p_I) = c1
+                    p2_I(cur_p_I) = next2
+                    c2 = next2
+            else
+                
+                if cur_p_I == 1:
+                    prev_width = 0
+                else:
+                    prev_width = d(p1_I(cur_p_I-1),p2_I(cur_p_I-1))
+
+                if (d_n1c2 > prev_width && d_n2c1 > prev_width):
+                    p1_I(cur_p_I) = next1
+                    p2_I(cur_p_I) = next2
+                    
+                    c1 = next1
+                    c2 = next2
+                elif d_n1c2 < d_n2c1:
+                    p1_I(cur_p_I) = next1
+                    p2_I(cur_p_I) = c2
+                    c1 = next1
+                else
+                    p1_I(cur_p_I) = c1
+                    p2_I(cur_p_I) = next2
+                    c2 = next2
+
+        
+        p1_I(cur_p_I+1:end) = []
+        p2_I(cur_p_I+1:end) = []
+
 
     @staticmethod
     def computeWidths(nw,vulva_contours,non_vulva_contours):
@@ -754,16 +981,15 @@ class WormParsing(object):
             
             #%For each point on side 1, calculate normalized orthogonal values
             norm_x,norm_y = WormParsing.h__computeNormalVectors(s1)
-
-            import pdb
-            pdb.set_trace()
-            
-            #JAH: At this point, below is not implemented            
-            
+                   
             #%For each point on side 1, find which side 2 the point pairs with
             dp_values1,match_I1 = WormParsing.h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I)
 
+            I1,I2 = WormParsing.h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT)
 
+
+            import pdb
+            pdb.set_trace()
 
                
         
