@@ -776,8 +776,12 @@ class WormParsing(object):
     
     @staticmethod
     def h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT):
-
-        end_s1_walk_I = np.ceil(len(s1)*END_S1_WALK_PCT)
+        
+        n_s1 = s1.shape[1]
+        n_s2 = s2.shape[1]       
+        
+        
+        end_s1_walk_I = np.ceil(n_s1*END_S1_WALK_PCT)
         end_s2_walk_I = 2*end_s1_walk_I
         p1_I,p2_I = WormParsing.h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2)
         
@@ -786,13 +790,12 @@ class WormParsing(object):
         keep_mask = np.zeros(len(match_I1),dtype=np.bool)
         keep_mask[p1_I] = True
         
-        n_s1 = len(s1)
-        n_s2 = len(s2)
+
         end_s1_walk_backwards = n_s1 - end_s1_walk_I + 1
         end_s2_walk_backwards = n_s2 - end_s2_walk_I + 1
         
         
-        p1_I,p2_I = WormParsing.h__getPartnersViaWalk(n_s1,end_s1_walk_backwards,n_s2,end_s2_walk_backwards,d_across,s1,s2)
+        p1_I,p2_I = WormParsing.h__getPartnersViaWalk(n_s1-1,end_s1_walk_backwards,n_s2-1,end_s2_walk_backwards,d_across,s1,s2)
         match_I1[p1_I] = p2_I
         keep_mask[p1_I] = True
         
@@ -803,16 +806,16 @@ class WormParsing(object):
         keep_mask[0]   = True
         keep_mask[-1] = True
     
-        match_I1[0] = 1;
-        match_I1[-1] = length(s2)
+        match_I1[0] = 1
+        match_I1[-1] = n_s2
         
     
         #This isn't perfect but it removes some back and forth behavior
         #of the matching. We'd rather drop points and smooth
-        I_1 = utils.find(keep_mask);
-        I_2 = match_I1[keep_mask];
+        I_1 = utils.find(keep_mask)
+        I_2 = match_I1[keep_mask]
 
-        return (I1,I2)
+        return (I_1,I_2)
         
     @staticmethod
     def h__getPartnersViaWalk(s1,e1,s2,e2,d,xy1,xy2):
@@ -831,14 +834,13 @@ class WormParsing(object):
 
 
         #TODO: remove hardcode
-        p1_I = np.zeros(200)
-        p2_I = np.zeros(200)
+        p1_I = np.zeros(200,dtype=np.int)
+        p2_I = np.zeros(200,dtype=np.int)
     
         c1 = s1 #current 1 index
         c2 = s2 #current 2 index
-        cur_p_I = 0 #current pair index
-    
-    
+        cur_p_I = -1 #current pair index
+        
         while c1 != e1 and c2 != e2:
             cur_p_I += 1
             
@@ -849,37 +851,40 @@ class WormParsing(object):
                 next1 = c1+1
                 next2 = c2+1
             
-            import pdb
-            pdb.set_trace()
-            
             #JAH: At this point
             #Need to handle indexing () vs [] and indexing spans (if any)
             #as well as 0 vs 1 based indexing (if any)
-            v_n1c1 = xy1(next1,:) - xy1(c1,:)
-            v_n2c2 = xy2(next2,:) - xy2(c2,:)
+            try:
+                v_n1c1 = xy1[:,next1] - xy1[:,c1]
+            except:
+                import pdb
+                pdb.set_trace()
+                
+            v_n2c2 = xy2[:,next2] - xy2[:,c2]
             
-            d_n1n2 = d(next1,next2)
-            d_n1c2 = d(next1,c2)
-            d_n2c1 = d(c1,next2)
+            #216,231
+            d_n1n2 = d[next1,next2]
+            d_n1c2 = d[next1,c2]
+            d_n2c1 = d[c1,next2]
             
             
-            if d_n1c2 == d_n2c1 || (d_n1n2 <= d_n1c2 && d_n1n2 <= d_n2c1):
+            if d_n1c2 == d_n2c1 or (d_n1n2 <= d_n1c2 and d_n1n2 <= d_n2c1):
                 #Advance along both contours
                 
-                p1_I(cur_p_I) = next1;
-                p2_I(cur_p_I) = next2;
+                p1_I[cur_p_I] = next1;
+                p2_I[cur_p_I] = next2;
                 
                 c1 = next1;
                 c2 = next2;
                 
-            elif np.all((v_n1c1.*v_n2c2) > -1):
+            elif np.all((v_n1c1*v_n2c2) > -1):
                 #contours go similar directions
                 #follow smallest width
                 if d_n1c2 < d_n2c1:
                     #consume smaller distance, then move the base of the vector
                     #further forward
-                    p1_I(cur_p_I) = next1
-                    p2_I(cur_p_I) = c2
+                    p1_I[cur_p_I] = next1
+                    p2_I[cur_p_I] = c2
                     
                     #This bit always confuses me
                     #c1  n1
@@ -890,34 +895,37 @@ class WormParsing(object):
                     #Advance c1 so that d_n2_to_c1 is smaller next time
                     c1 = next1
                 else:
-                    p1_I(cur_p_I) = c1
-                    p2_I(cur_p_I) = next2
+                    p1_I[cur_p_I] = c1
+                    p2_I[cur_p_I] = next2
                     c2 = next2
-            else
+            else:
                 
                 if cur_p_I == 1:
                     prev_width = 0
                 else:
-                    prev_width = d(p1_I(cur_p_I-1),p2_I(cur_p_I-1))
+                    prev_width = d[p1_I[cur_p_I-1],p2_I[cur_p_I-1]]
 
-                if (d_n1c2 > prev_width && d_n2c1 > prev_width):
-                    p1_I(cur_p_I) = next1
-                    p2_I(cur_p_I) = next2
+                if (d_n1c2 > prev_width and d_n2c1 > prev_width):
+                    p1_I[cur_p_I] = next1
+                    p2_I[cur_p_I] = next2
                     
                     c1 = next1
                     c2 = next2
                 elif d_n1c2 < d_n2c1:
-                    p1_I(cur_p_I) = next1
-                    p2_I(cur_p_I) = c2
+                    p1_I[cur_p_I] = next1
+                    p2_I[cur_p_I] = c2
                     c1 = next1
-                else
-                    p1_I(cur_p_I) = c1
-                    p2_I(cur_p_I) = next2
+                else:
+                    p1_I[cur_p_I] = c1
+                    p2_I[cur_p_I] = next2
                     c2 = next2
 
+        p1_I = p1_I[:cur_p_I]
+        p2_I = p2_I[:cur_p_I]
         
-        p1_I(cur_p_I+1:end) = []
-        p2_I(cur_p_I+1:end) = []
+        return (p1_I,p2_I)
+        #p1_I[cur_p_I+1:] = []
+        #p2_I[cur_p_I+1:] = []
 
 
     @staticmethod
