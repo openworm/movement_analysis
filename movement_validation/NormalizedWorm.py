@@ -682,31 +682,31 @@ class WormParsing(object):
         Returns slice starts and stops
         #TODO: Rename everything to start and stop
         """
-        pct = np.linspace(0,1,n1);
-        left_pct = pct - p_left;
-        right_pct = pct + p_right;
+        pct = np.linspace(0,1,n1)
+        left_pct = pct - p_left
+        right_pct = pct + p_right
 
-        left_I = np.floor(left_pct*n2);
-        right_I = np.ceil(right_pct*n2);
+        left_I = np.floor(left_pct*n2)
+        right_I = np.ceil(right_pct*n2)
         left_I[left_I < 0] = 0;
-        right_I[right_I >= n2] = n2-1;
-        right_I += 1
+        right_I[right_I >= n2] = n2-1
         return left_I,right_I
     
     @staticmethod
     def h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I):
         
         n_s1 = s1.shape[1]
-        match_I = np.zeros(n_s1)
+        match_I = np.zeros(n_s1,dtype=np.int)
         match_I[0] = 0
         match_I[-1] = s2.shape[1]
         
-        dp_values = np.ones(n_s1)
-        #Why do I do this? It might not be necessary
-        dp_values[0] = -1
-        dp_values[-1] = -1
+        dp_values = np.zeros(n_s1)
         
-        for I,(lb,rb) in enumerate(zip(left_I,right_I)):
+
+        #There is no need to do the first and last point
+        for I,(lb,rb) in enumerate(zip(left_I[1:-1],right_I[1:-1])):
+
+            I = I + 1
             
 #            try:
             [abs_dp_value,dp_I] = WormParsing.h__getProjectionIndex(norm_x[I],norm_y[I],dx_across[I,lb:rb],dy_across[I,lb:rb],lb,d_across[I,lb:rb])
@@ -770,13 +770,28 @@ class WormParsing(object):
             dp_I = np.argmin(dp)
             dp_value = dp[dp_I]
         
-        I = left_I + dp_I - 1
+        I = left_I + dp_I
     
         return (dp_value,I)
     
     @staticmethod
     def h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT):
         
+        """
+        
+        Parameters
+        ----------
+        d_across
+        match_I1
+        s1
+        s2
+        END_S1_WALK_PCT :
+        
+        Returns
+        -------
+        (I_1,I_2)
+        
+        """
         n_s1 = s1.shape[1]
         n_s2 = s2.shape[1]       
         
@@ -785,12 +800,15 @@ class WormParsing(object):
         end_s2_walk_I = 2*end_s1_walk_I
         p1_I,p2_I = WormParsing.h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2)
         
+        import pdb
+        pdb.set_trace()        
+        
         match_I1[p1_I] = p2_I
         
         keep_mask = np.zeros(len(match_I1),dtype=np.bool)
         keep_mask[p1_I] = True
         
-
+        #Add 
         end_s1_walk_backwards = n_s1 - end_s1_walk_I + 1
         end_s2_walk_backwards = n_s2 - end_s2_walk_I + 1
         
@@ -960,10 +978,20 @@ class WormParsing(object):
         n_frames = len(vulva_contours)
         data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
 
+        sx_all = []
+        sy_all = []
+        widths_all = []
+
         for iFrame, (s1,s2) in enumerate(zip(vulva_contours,non_vulva_contours)):
             
             # * I'm writing the code based on awesome_contours_oh_yeah_v2
             #   in Jim's testing folder            
+            
+            if len(s1) == 0:
+                sx_all.append(None)
+                sy_all.append(None)
+                widths_all.append(None)
+                continue
             
             #Step 1: filter
             filter_width_s1 = WormParsing.h__roundToOdd(s1.shape[1]*FRACTION_WORM_SMOOTH)    
@@ -993,9 +1021,31 @@ class WormParsing(object):
             #%For each point on side 1, find which side 2 the point pairs with
             dp_values1,match_I1 = WormParsing.h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I)
 
-            I1,I2 = WormParsing.h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT)
+            I_1,I_2 = WormParsing.h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT)
 
+            #We're looking to the left and to the right to ensure that things are ordered
+            #                           current is before next    current after previous
+            is_good = np.hstack((True, np.array((I_2[1:-1] <= I_2[2:]) & (I_2[1:-1] >= I_2[:-2])), True))
+            
+            #is_good = [true; ((I_2(2:end-1) <= I_2(3:end)) & (I_2(2:end-1) >= I_2(1:end-2))); true];
+            
+            I_1 = I_1[is_good]
+            I_2 = I_2[is_good]
+            
+            s1_x  = s1[0,I_1]
+            s1_y  = s1[1,I_1]
+            s1_px = s2[0,I_2] #s1_pair x
+            s1_py = s2[1,I_2]
+        
+            #TODO: Allow smoothing on x & y
+            skeleton_x = 0.5*[s1_x + s1_px]
+            skeleton_y = 0.5*[s1_y + s1_py]
+            widths1 = np.sqrt((s1_px-s1_x)**2 + (s1_py - s1_y)**2); #widths
 
+            sx_all.append(skeleton_x);
+            sy_all.append(skeleton_y);            
+            widths_all.append(widths1)
+            
             import pdb
             pdb.set_trace()
 
