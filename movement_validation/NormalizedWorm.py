@@ -103,6 +103,10 @@ class NormalizedWorm(object):
         """ 
         Create an instance from skeleton and contour data
         
+        
+        TODO: We need to clarify the value for a missing frame
+        I think currently it is [] but perhaps it should be None        
+        
         Parameters
         --------------------------------------- 
         skeletons : list
@@ -113,11 +117,21 @@ class NormalizedWorm(object):
         vulva_contours and non_vulva_contours should start and end at the same locations, from head to tail
 
         """
-
-        self.angles = WormParsing.calculateAngles
+        
+        #TODO: Skeletons are optional, but at some point we'll probably need
+        #to make contours optional as well        
         
         #TODO: Do I want to grab the skeletons from here????
-        widths = WormParsing.computeWidths(self,vulva_contours,non_vulva_contours)            
+        t = time.time()
+        widths,skeletons = WormParsing.computeWidths(self,vulva_contours,non_vulva_contours)            
+        self.widths = WormParsing.normalizeAllFrames(self,widths,skeletons)        
+        elapsed = time.time() - t
+        print('Elapsed time: %g'%(t))        
+
+        import pdb  
+        pdb.set_trace()  
+        
+        self.angles = WormParsing.calculateAngles(skeletons)        
         
         #t = time.time()
         self.skeletons = WormParsing.normalizeAllFramesXY(self,skeletons)   
@@ -701,29 +715,38 @@ class WormParsing(object):
         match_I[-1] = s2.shape[1]
         
         dp_values = np.zeros(n_s1)
-        
+        all_signs_used = np.zeros(n_s1)
 
         #There is no need to do the first and last point
         for I,(lb,rb) in enumerate(zip(left_I[1:-1],right_I[1:-1])):
 
             I = I + 1
-            
-#            try:
-            [abs_dp_value,dp_I] = WormParsing.h__getProjectionIndex(norm_x[I],norm_y[I],dx_across[I,lb:rb],dy_across[I,lb:rb],lb,d_across[I,lb:rb])
+            [abs_dp_value,dp_I,sign_used] = WormParsing.h__getProjectionIndex(norm_x[I],norm_y[I],dx_across[I,lb:rb],dy_across[I,lb:rb],lb,d_across[I,lb:rb],0)
+            all_signs_used[I] = sign_used
             dp_values[I] = abs_dp_value
             match_I[I] = dp_I
-#            except:
-#                #   print "Unexpected error:", sys.exc_info()[0]
-#                import pdb
-#                pdb.set_trace()
             
-
+        if not np.all(all_signs_used[1:-1] == all_signs_used[1]):
+            if np.sum(all_signs_used) > 0:
+                sign_use = 1
+                I_bad = utils.find(all_signs_used[1:-1] != 1) + 1
+            else:
+                I_bad = utils.find(all_signs_used[1:-1] != -1) + 1
+                sign_use = -1
+                
+            for I in I_bad:    
+                lb = left_I[I]
+                rb = right_I[I]
+                [abs_dp_value,dp_I,sign_used] = WormParsing.h__getProjectionIndex(norm_x[I],norm_y[I],dx_across[I,lb:rb],dy_across[I,lb:rb],lb,d_across[I,lb:rb],sign_use)
+                all_signs_used[I] = sign_used
+                dp_values[I] = abs_dp_value
+                match_I[I] = dp_I    
 
 
         return (dp_values,match_I)
     
     @staticmethod
-    def h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_worm,dy_across_worm,left_I,d_across):
+    def h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_worm,dy_across_worm,left_I,d_across,sign_use):
         
         
         #% nvc_local = nvc(nvc_indices_use,:);
@@ -745,10 +768,15 @@ class WormParsing(object):
         #I'd like to not have to do this step, it has to do with the relationship
         #between the vulva and non-vulva side. This should be consistent across the
         #entire animal and could be passed in, unless the worm rolls.
-        if np.sum(dp) > 0:
+        sign_used = -1;
+        if sign_use == 0 and np.sum(dp) > 0:
             #Instead of multiplying by -1 we could hardcode the flip of the logic
             #below (e.g. max instead of min, > vs <)
             dp = -1*dp
+            sign_used = 1
+        elif sign_use == 1:
+            dp = -1*dp
+            sign_used = 1
         
         #This is slow, presumably due to the memory allocation ...
         #               < right                         < left
@@ -772,7 +800,7 @@ class WormParsing(object):
         
         I = left_I + dp_I
     
-        return (dp_value,I)
+        return (dp_value,I,sign_used)
     
     @staticmethod
     def h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT):
@@ -798,10 +826,7 @@ class WormParsing(object):
         
         end_s1_walk_I = np.ceil(n_s1*END_S1_WALK_PCT)
         end_s2_walk_I = 2*end_s1_walk_I
-        p1_I,p2_I = WormParsing.h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2)
-        
-        import pdb
-        pdb.set_trace()        
+        p1_I,p2_I = WormParsing.h__getPartnersViaWalk(0,end_s1_walk_I,0,end_s2_walk_I,d_across,s1,s2)
         
         match_I1[p1_I] = p2_I
         
@@ -814,6 +839,7 @@ class WormParsing(object):
         
         
         p1_I,p2_I = WormParsing.h__getPartnersViaWalk(n_s1-1,end_s1_walk_backwards,n_s2-1,end_s2_walk_backwards,d_across,s1,s2)
+
         match_I1[p1_I] = p2_I
         keep_mask[p1_I] = True
         
@@ -824,8 +850,8 @@ class WormParsing(object):
         keep_mask[0]   = True
         keep_mask[-1] = True
     
-        match_I1[0] = 1
-        match_I1[-1] = n_s2
+        match_I1[0] = 0
+        match_I1[-1] = n_s2-1
         
     
         #This isn't perfect but it removes some back and forth behavior
@@ -862,6 +888,8 @@ class WormParsing(object):
         while c1 != e1 and c2 != e2:
             cur_p_I += 1
             
+            #We are either going up or down based on which end we are
+            #starting from (beggining or end)
             if e1 < s1:
                 next1 = c1-1
                 next2 = c2-1        
@@ -975,11 +1003,7 @@ class WormParsing(object):
         END_S1_WALK_PCT = 0.15;
         
 
-        n_frames = len(vulva_contours)
-        data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
-
-        sx_all = []
-        sy_all = []
+        s_all = []
         widths_all = []
 
         for iFrame, (s1,s2) in enumerate(zip(vulva_contours,non_vulva_contours)):
@@ -988,9 +1012,8 @@ class WormParsing(object):
             #   in Jim's testing folder            
             
             if len(s1) == 0:
-                sx_all.append(None)
-                sy_all.append(None)
-                widths_all.append(None)
+                s_all.append([])
+                widths_all.append([])
                 continue
             
             #Step 1: filter
@@ -1023,6 +1046,8 @@ class WormParsing(object):
 
             I_1,I_2 = WormParsing.h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT)
 
+            #TODO: Make this a function
+            #------------------------------------
             #We're looking to the left and to the right to ensure that things are ordered
             #                           current is before next    current after previous
             is_good = np.hstack((True, np.array((I_2[1:-1] <= I_2[2:]) & (I_2[1:-1] >= I_2[:-2])), True))
@@ -1037,127 +1062,35 @@ class WormParsing(object):
             s1_px = s2[0,I_2] #s1_pair x
             s1_py = s2[1,I_2]
         
+            #Final calculations
+            #-----------------------
             #TODO: Allow smoothing on x & y
-            skeleton_x = 0.5*[s1_x + s1_px]
-            skeleton_y = 0.5*[s1_y + s1_py]
             widths1 = np.sqrt((s1_px-s1_x)**2 + (s1_py - s1_y)**2); #widths
-
-            sx_all.append(skeleton_x);
-            sy_all.append(skeleton_y);            
             widths_all.append(widths1)
             
-            import pdb
-            pdb.set_trace()
+            skeleton_x = 0.5*(s1_x + s1_px)
+            skeleton_y = 0.5*(s1_y + s1_py)
+            s_all.append(np.vstack((skeleton_x,skeleton_y)));
+            
 
-               
-        
-
-          
+        return (widths_all,s_all)
                 
+        """
+            import matplotlib.pyplot as plt
+            plt.scatter(vc[0,:],vc[1,:])
+            plt.scatter(nvc[0,:],nvc[1,:])
+            plt.gca().set_aspect('equal', adjustable='box')
+            plt.show()
+            
+            plt.plot(x_plot,y_plot)
+            plt.show()
+            
+            plt.scatter(s1[0,:],s1[1,:])
+            plt.scatter(s2[0,:],s2[1,:])
+            plt.scatter(skeleton_x,skeleton_y)
+            plt.show()
+        """
 
-#                import matplotlib.pyplot as plt
-#                plt.scatter(vc[0,:],vc[1,:])
-#                plt.scatter(nvc[0,:],nvc[1,:])
-#                plt.gca().set_aspect('equal', adjustable='box')
-#                plt.show()
-#                
-#                plt.plot(x_plot,y_plot)
-#                plt.show()
-            
-            """
-            #TODO: Make sure to bound
-            cur_output_I = 0
-            
-            vc_I  = int(1)
-            nvc_I = int(1)
-            n_points = vc.shape[1]
-            contour_widths = np.zeros(n_points*2)
-            
-            cur_xy_I = -3
-            x_plot = np.full(n_points*5,np.NaN)
-            y_plot = np.full(n_points*5,np.NaN)
-            x_plot2 = np.full(n_points*5,np.NaN)
-            y_plot2 = np.full(n_points*5,np.NaN)
-            x_plot3 = np.full(n_points*5,np.NaN)
-            y_plot3 = np.full(n_points*5,np.NaN)
-            
-            while (nvc_I != (n_points-2)) and (vc_I != (n_points-2)):
-                cur_xy_I += 3 #skip a NaN too
-                cur_output_I += 1             
-             
-                next_vc_I  = vc_I + 1
-                next_nvc_I = nvc_I + 1
-                
-                if next_vc_I == 215:
-                    pdb.set_trace()
-                v_vc   = vc[:,next_vc_I] - vc[:,vc_I]     #dnj1
-                v_nvc  = nvc[:,next_nvc_I] - nvc[:,nvc_I] #dnj2
-                d_next = np.sum((vc[:,next_vc_I]-nvc[:,next_nvc_I])**2) #d12
-                d_vc   = np.sum((vc[:,next_vc_I]-nvc[:,nvc_I])**2) #d1
-                d_nvc  = np.sum((vc[:,next_nvc_I]-nvc[:,vc_I])**2) #d2 - nvc
-              
-                #(d_vc == d_nvc) or 
-                if ((d_next <= d_vc) and (d_next <= d_nvc)):
-                    vc_I = next_vc_I
-                    nvc_I = next_nvc_I
-                    contour_widths[cur_output_I] = np.sqrt(d_next)
-                    
-                    x_plot[cur_xy_I] = vc[0,vc_I]
-                    y_plot[cur_xy_I] = vc[1,vc_I]   
-                    x_plot[cur_xy_I+1] = nvc[0,nvc_I]
-                    y_plot[cur_xy_I+1] = nvc[1,nvc_I]
-                    
-                    
-                elif np.all((v_vc*v_nvc) >= 0):
-                #contours go in similar directions
-                #
-                #Multiplication is checking that we have +*+ or -*- or 
-                #a zero or two thrown in there (for the x & ys)
-                #
-                #NOTE: in general we want the smallest width as this is indicative
-                #of being orthogonal to the direction of the body where
-                #as going across the body at an angle will increase the apparent 
-                #width (indicating that the larger width is not appropriate)
-                
-                    if d_vc < d_nvc:
-                        vc_I = next_vc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_vc)
-                        
-                        x_plot2[cur_xy_I] = vc[0,next_vc_I]
-                        y_plot2[cur_xy_I] = vc[1,next_vc_I]   
-                        x_plot2[cur_xy_I+1] = nvc[0,nvc_I]
-                        y_plot2[cur_xy_I+1] = nvc[1,nvc_I]                        
-                        
-                        
-                    else:
-                        nvc_I = next_nvc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
-
-                        x_plot3[cur_xy_I] = vc[0,next_vc_I]
-                        y_plot3[cur_xy_I] = vc[1,next_vc_I]   
-                        x_plot3[cur_xy_I+1] = nvc[0,nvc_I]
-                        y_plot3[cur_xy_I+1] = nvc[1,nvc_I] 
-                        
-                else:        
-                # The contours go in opposite directions.
-                # Follow decreasing widths or walk along both contours.
-                # In other words, catch up both contours, then walk along both.
-                # Note: this step negotiates hairpin turns and bulges.                        
-                    prev_width = contour_widths[cur_output_I]**2
-                    if ((d_next <= d_vc) and (d_next <= d_nvc)) or ((d_vc > prev_width) and (d_nvc > prev_width)):
-                        vc_I = next_vc_I
-                        nvc_I = next_nvc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_next)  
-                    elif d_vc < d_nvc:
-                        vc_I = next_vc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_vc)
-                    else:
-                        nvc_I = next_nvc_I
-                        contour_widths[cur_output_I] = np.sqrt(d_nvc)
-                        
-                    
-                temp_widths_list.append(contour_widths)    
-            """
 
 
 
@@ -1227,7 +1160,7 @@ class WormParsing(object):
     def normalizeAllFrames(nw,prop_to_normalize,xy_data):
             
         n_frames = len(prop_to_normalize)
-        norm_data = np.full([self.N_POINTS_NORMALIZED,n_frames],np.NaN)
+        norm_data = np.full([nw.N_POINTS_NORMALIZED,n_frames],np.NaN)
         for iFrame, (cur_frame_value,cur_xy) in enumerate(zip(prop_to_normalize,xy_data)):
             if len(cur_frame_value) is not 0:
                 sx = cur_xy[0,:]
@@ -1339,11 +1272,16 @@ class WormParsing(object):
         non_normalizied_data :
             - ()
         """
-        
-        
-        #TODO: Might just replace all of this with an interpolation call
+        n_old = len(old_lengths)
+        I = np.array(range(n_old))
         
         new_lengths = np.linspace(old_lengths[0],old_lengths[-1],self.N_POINTS_NORMALIZED)
+        evaluation_I = np.interp(new_lengths,old_lengths,I)
+        
+        norm_data = np.interp(evaluation_I,I,orig_data)
+        #TODO: Might just replace all of this with an interpolation call
+        
+        
         
         #For each point, get the bordering points
         #Sort, with old coming before new
@@ -1360,19 +1298,23 @@ class WormParsing(object):
         for iSeg,cur_new_I in enumerate(new_I):
             cur_left_I = I[cur_new_I-1]
             cur_right_I = cur_left_I + 1
-            if iSeg == 0 or (iSeg == len(new_lengths) - 1) or (new_lengths[iSeg] == old_lengths[cur_left_I]):
-                norm_data[iSeg] = orig_data[cur_left_I]
-            else:
-                new_position = new_lengths[iSeg]
-                left_position = old_lengths[cur_left_I]
-                right_position = old_lengths[cur_right_I]                    
-                total_length = right_position - left_position
-                #NOTE: If we are really close to left, then we want mostly
-                #left, which means right_position - new_position will almost
-                #be equal to the total length, and left_pct will be close to 1
-                left_pct = (right_position - new_position)/total_length
-                right_pct = (new_position - left_position)/total_length
-                norm_data[iSeg] = left_pct*orig_data[cur_left_I] + right_pct*orig_data[cur_right_I]
+            try:
+                if iSeg == 0 or (iSeg == len(new_lengths) - 1) or (new_lengths[iSeg] == old_lengths[cur_left_I]):
+                    norm_data[iSeg] = orig_data[cur_left_I]
+                else:
+                    new_position = new_lengths[iSeg]
+                    left_position = old_lengths[cur_left_I]
+                    right_position = old_lengths[cur_right_I]                    
+                    total_length = right_position - left_position
+                    #NOTE: If we are really close to left, then we want mostly
+                    #left, which means right_position - new_position will almost
+                    #be equal to the total length, and left_pct will be close to 1
+                    left_pct = (right_position - new_position)/total_length
+                    right_pct = (new_position - left_position)/total_length
+                    norm_data[iSeg] = left_pct*orig_data[cur_left_I] + right_pct*orig_data[cur_right_I]
+            except:
+                import pdb
+                pdb.set_trace()
 
 
         return norm_data        

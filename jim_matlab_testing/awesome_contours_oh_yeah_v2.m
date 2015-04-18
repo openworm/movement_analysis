@@ -89,8 +89,8 @@ for iFrame = frame_values %1:100:4642
         continue
     end
     
-    vc_raw  = s1;
-    nvc_raw = s2;
+%     vc_raw  = s1;
+%     nvc_raw = s2;
 
     filter_width_s1 = sl.math.roundToOdd(size(s1,1)*FRACTION_WORM_SMOOTH);
     s1(:,1) = sgolayfilt(s1(:,1),3,filter_width_s1);
@@ -122,6 +122,11 @@ for iFrame = frame_values %1:100:4642
     
     %For each point on side 1, find which side 2 the point pairs with
     [dp_values1,match_I1] = h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I);
+    
+    %{
+    I_1 = 1:length(match_I1);
+    I_2 = match_I1;
+    %}
     
     %The ends don't project well across, so we start at the ends and 
     %walk a bit towards the center
@@ -317,15 +322,46 @@ dp_values = ones(size(s1,1),1);
 dp_values(1) = -1;
 dp_values(end) = -1;
 
-for I = 2:n_s1-1;
+all_signs_used = zeros(1,n_s1);
+
+for I = 2:n_s1-1
     
     lb = left_I(I);
     rb = right_I(I);
     
-    [abs_dp_value,dp_I] = h__getProjectionIndex(norm_x(I),norm_y(I),dx_across(I,lb:rb),dy_across(I,lb:rb),lb,d_across(I,lb:rb));
+    [abs_dp_value,dp_I,sign_used] = h__getProjectionIndex(norm_x(I),norm_y(I),dx_across(I,lb:rb),dy_across(I,lb:rb),lb,d_across(I,lb:rb),0);
+    
+    all_signs_used(I) = sign_used;
     
     dp_values(I) = abs_dp_value;
     match_I(I)   = dp_I;
+end
+
+%Here we check that the projection direction was similar across the
+%skeleton. Sometimes some positions get unlucky and get projections that
+%are close to -1 and 1, in which case it is unclear which we should keep.
+%
+%Problem Example: Frame 261 of example video
+if ~all(all_signs_used(2:end-1) == all_signs_used(2))
+    if sum(all_signs_used) > 0
+        sign_use = 1;
+        I_bad = find(all_signs_used(2:end-1) ~= 1) + 1;
+    else
+        I_bad = find(all_signs_used(2:end-1) ~= -1) + 1;
+        sign_use = -1;
+    end
+    for I = I_bad
+    
+    lb = left_I(I);
+    rb = right_I(I);
+    
+    [abs_dp_value,dp_I,sign_used] = h__getProjectionIndex(norm_x(I),norm_y(I),dx_across(I,lb:rb),dy_across(I,lb:rb),lb,d_across(I,lb:rb),sign_use);
+    
+    all_signs_used(I) = sign_used;
+    
+    dp_values(I) = abs_dp_value;
+    match_I(I)   = dp_I;
+    end
 end
 
 end
@@ -352,8 +388,13 @@ norm_y = dy_norm./vc_d_magnitude;
 
 end
 
-function [dp_value,I] = h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_worm,dy_across_worm,left_I,d_across)
+function [dp_value,I,sign_used] = h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_worm,dy_across_worm,left_I,d_across,sign_use)
 
+%
+%   sign_use : 
+%       -  0, use anything
+%       -  1, use positive
+%       - -1, use negative
 
 % nvc_local = nvc(nvc_indices_use,:);
 %
@@ -374,10 +415,15 @@ dp = dx_across_worm*vc_dx_ortho + dy_across_worm*vc_dy_ortho;
 %I'd like to not have to do this step, it has to do with the relationship
 %between the vulva and non-vulva side. This should be consistent across the
 %entire animal and could be passed in, unless the worm rolls.
-if sum(dp) > 0
+sign_used = -1;
+if sign_use == 0 && sum(dp) > 0
     %Instead of multiplying by -1 we could hardcode the flip of the logic
     %below (e.g. max instead of min, > vs <)
     dp = -1*dp;
+    sign_used = 1;
+elseif sign_use == 1
+    dp = -1*dp;
+    sign_used = 1;
 end
 
 %This is slow, presumably due to the memory allocation ...
@@ -436,6 +482,16 @@ while c1 ~= e1 && c2 ~= e2
         next2 = c2+1;
     end
     
+    scatter(xy1(:,1),xy1(:,2))
+    hold on
+    scatter(xy2(:,1),xy2(:,2))
+    plot(xy1(c1,1),xy1(c1,2),'+k')
+    plot(xy2(c2,1),xy2(c2,2),'+r')
+    plot(xy1(next1,1),xy1(next1,2),'dk')
+    plot(xy2(next2,1),xy2(next2,2),'dr')    
+    hold off
+    axis equal
+    
     v_n1c1 = xy1(next1,:) - xy1(c1,:);
     v_n2c2 = xy2(next2,:) - xy2(c2,:);
     
@@ -452,7 +508,7 @@ while c1 ~= e1 && c2 ~= e2
         
         c1 = next1;
         c2 = next2;
-        
+        option = 1;
     elseif all((v_n1c1.*v_n2c2) > -1)
         %contours go similar directions
         %follow smallest width
@@ -470,10 +526,12 @@ while c1 ~= e1 && c2 ~= e2
             %
             %Advance c1 so that d_n2_to_c1 is smaller next time
             c1 = next1;
+            option = 2;
         else
             p1_I(cur_p_I) = c1;
             p2_I(cur_p_I) = next2;
             c2 = next2;
+            option = 3;
         end
     else
         
@@ -489,17 +547,30 @@ while c1 ~= e1 && c2 ~= e2
             
             c1 = next1;
             c2 = next2;
+            option = 4;
         elseif d_n1c2 < d_n2c1
             p1_I(cur_p_I) = next1;
             p2_I(cur_p_I) = c2;
             c1 = next1;
+            option = 5;
         else
             p1_I(cur_p_I) = c1;
             p2_I(cur_p_I) = next2;
             c2 = next2;
+            option = 6;
         end
         
     end
+    
+    fprintf(1,'Option: %d\n',option);
+    for line_I = 1:cur_p_I
+       cur_1I = p1_I(line_I);
+       cur_2I = p2_I(line_I);
+       line([xy1(cur_1I,1),xy2(cur_2I,1)],[xy1(cur_1I,2),xy2(cur_2I,2)],'Color','k')
+    end
+    cur_1I = p1_I(cur_p_I);
+    cur_2I = p2_I(cur_p_I);
+    line([xy1(cur_1I,1),xy2(cur_2I,1)],[xy1(cur_1I,2),xy2(cur_2I,2)],'Color','k')
     
 end
 
