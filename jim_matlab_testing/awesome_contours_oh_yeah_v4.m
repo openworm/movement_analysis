@@ -1,64 +1,42 @@
-function awesome_contours_oh_yeah_v2(frame_values)
-%
-%   too much Despicable Me watching ...
-%
-%   Algorithm:
-%   ----------
-%   Find which point when taking the line from the current point to that
-%   opposite point and the normal of the current point, makes the 2
-%   parallel.
-%
-%   x   c   x
-%      | |      left | is the normal for c, based on its gradient
-%        |      right | is the line between c and the middle y
-%        |      find which y makes the 2 lines most parallel (dot product maximized
-%   y   y   y
+function awesome_contours_oh_yeah_v4(frame_values)
 %
 %
+%   SEEMS TO SENSITIVE TO PARAMETERS
 %
-%   Status:
+%   This algorithm grows the skeleton by going out a certain
+%   distance from the last skeleton point and then rotating that point
+%   until the widths to either side are roughly equal.
+%
+%   Issues:
 %   -------
-%   1) FIXED algorithm doesn't work on non parallel surfaces, consider a diamond
-%    /|\
-%   / | \
-%   \ | /
-%    \|/
-%       This practically has an effect at the ends and needs to be fixed.
-%      Interpolation of good values might fix this problem.
+%   1) This is really slow, but I think this can be sped up significantly.
+%   
+%       - # of angles to test - use line fits to estimate best rotation
+%       - is testing for an intersection any quicker than just trying to
+%       find the intersection? - presumably if we hit the intersection 
+%       often, then we're better off just calculating it
+%       - Take advantage of the smooth change in rotation to know which
+%         segment to test for the intersection
+%       - start with small rotations then expand, since it is likely
+%       that we only need small rotations as we are advancing
 %
-%   2) SOMEWHAT HANDLED Points are not guaranteed to be ordered, so a dot product would
-%   need to be computed for subsequent points to look for reversals.
+%   2) We need to hold onto the solution values
 %
-%   i.e., this would be fine for midpoints - no backtracking
-%   1 2
-%       3
-%         4
+%   3) The ends are bit messy. We should probably start at both ends
+%   and merge in the middle.
 %
-%   this would not: point 3 would need to be removed ...
-%   1   3 2 4
-%
-%   3) Spurs are not handled. It would be good to get an example of this
-%   since I think we could handle this.
-%
-%   Interesting Frames:
-%   -------------------
-%   11 - good example of ends not being nicely shaped
-%   261 - failure when the back/forth search is not pretty wide (0.3
-%   instead of 0.2)
-%   3601 - coiling that fails with dot product unless a search is done
-%       for multiple peaks and the smaller width chosen
+%   
 %
 
-%Original example contour & skeleton data from:
 %
 
-%Problem frames:
-%1200 - ends are a bit messed up
+%Frame 877 - the frame that motivated this version
+
+
+STEP_SIZE = 2; %This should really be a percentage
+%As this gets small, the angles we need to test get really large
 
 FRACTION_WORM_SMOOTH = 1/12;
-PERCENT_BACK_SEARCH = 0.3;
-PERCENT_FORWARD_SEARCH = 0.3;
-END_S1_WALK_PCT = 0.15;
 
 file_path = 'C:\Users\RNEL\Google Drive\open_worm\example_data\example_contour_and_skeleton_info.mat';
 fp2 = 'C:\Users\RNEL\Google Drive\open_worm\example_data\example_video_norm_worm.mat';
@@ -99,154 +77,121 @@ for iFrame = frame_values %1:100:4642
     s2(:,1) = sgolayfilt(s2(:,1),3,filter_width_s2);
     s2(:,2) = sgolayfilt(s2(:,2),3,filter_width_s2);
     
+    s2(1,:)   = s1(1,:);
+    s2(end,:) = s1(end,:);
     
-    %TODO: Allow downsampling if the # of points is rediculous
-    %200 points seems to be a good #
-    %This operation gives us a matrix that is len(s1) x len(s2)
-    dx_across = bsxfun(@minus,s1(:,1),s2(:,1)');
-    dy_across = bsxfun(@minus,s1(:,2),s2(:,2)');
-    d_across  = sqrt(dx_across.^2 + dy_across.^2);
-    dx_across = dx_across./d_across;
-    dy_across = dy_across./d_across;
+    figure(1)
+    clf
+    scatter(s1(:,1),s1(:,2))
+    hold on
+    scatter(s2(:,1),s2(:,2))
+    axis equal
     
-    %all s1 matching to s2
-    %-------------------------
     
-    %For every s1 point, compute the furthest left and right (backwards and
-    %forwards we will go)
-    [left_I,right_I] = h__getBounds(size(s1,1),size(s2,1),PERCENT_BACK_SEARCH,PERCENT_FORWARD_SEARCH);
+    %line([s1(:,1) s1(:,1)+norm_xs1*sc1]',[s1(:,2) s1(:,2)+norm_ys1*sc1]','Color','k')
+    %line([s2(:,1) s2(:,1)+norm_xs2*sc1]',[s2(:,2) s2(:,2)+norm_ys2*sc1]','Color','r')
     
-    %For each point on side 1, calculate normalized orthogonal values
-    [norm_x,norm_y]  = h__computeNormalVectors(s1);
+    %line([s1(:,1) s2(I2,1)]',[s1(:,2) s2(I2,2)]','Color','k')
+ 
+    sc = 1000;
+    sc_plot = 100;
+    cur_p = s1(1,:);
+    next1 = 1+STEP_SIZE;
+    next2 = 1+STEP_SIZE;
+    tic
+    while true
+
+    hold on
+    plot(s1(next1,1),s1(next1,2),'k+')
+    plot(s2(next2,1),s2(next2,2),'k+')
+    hold off
     
-    %For each point on side 1, find which side 2 the point pairs with
-    [dp_values1,match_I1] = h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I);
+    
+    temp_mid = h__getMidpoint(s1(next1,:),s2(next2,:));
+    s_vector = temp_mid - cur_p;
+    orig_s_vector = s_vector;
+    %Some angles to select from ...
+    
+    %This span needs to be smarter ...
+        rotation_angles = -16:2:16;
+
+    
+    widths_all = zeros(length(rotation_angles),2);
+    I1_used = zeros(1,length(rotation_angles));
+    I2_used = zeros(1,length(rotation_angles));
+    indices_try_1 = next1+[0 -1 1 -2 2 -3 3 -4 4 -5 5 -6 6 -7 7 -8 8 -9 9];
+    indices_try_2 = next2+[0 -1 1 -2 2 -3 3 -4 4 -5 5 -6 6 -7 7 -8 8 -9 9];
+    if next1 < 10
+    indices_try_1(indices_try_1 < 1) = [];
+    end
+    if next2 < 10
+    indices_try_2(indices_try_2 < 1) = [];
+    end
+    %TODO: Add on checks for near end
+    for I = 1:length(rotation_angles)
+        rotation_angle = rotation_angles(I);
+        s_vector = h__rotateVector(orig_s_vector,rotation_angle*pi/180);
+        temp_mid = cur_p+s_vector;
+        norm1 = h__computeNormalVectors2(s_vector,0);
+        norm2 = h__computeNormalVectors2(s_vector,1);
+    
+        [widths_all(I,1),I1_used(I)] = h__getWidth(temp_mid,temp_mid+norm1*sc,s1,indices_try_1,true);
+        [widths_all(I,2),I2_used(I)] = h__getWidth(temp_mid,temp_mid+norm2*sc,s2,indices_try_2,false);
+    end
+    
+    metric = abs((widths_all(:,1) - widths_all(:,2)))./mean(widths_all,2);
+    
+    %TODO: Try and improve the accuracy by estimating 0 from the data
+    %points obtained and then recompute with that rotation value
+    
+    [~,I] = min(metric);
+    
+    s_vector = h__rotateVector(orig_s_vector,rotation_angles(I)*pi/180);    
+    temp_mid = cur_p+s_vector;
+    
+    %For plotting result ...
+    norm1 = h__computeNormalVectors2(s_vector,0);
+    norm2 = h__computeNormalVectors2(s_vector,1);
+    hold on
+    h__drawLine(cur_p,temp_mid,'Color','k')
+    h__drawLine(temp_mid,temp_mid+norm1*sc_plot,'Color','r')
+    h__drawLine(temp_mid,temp_mid+norm2*sc_plot,'Color','g')
+    hold off
+    
+    
+    
+    cur_p = temp_mid(1,:);
+    next1 = I1_used(I)+STEP_SIZE;
+    next2 = I2_used(I)+STEP_SIZE;
+    
+    if (next1+10 >= length(s1)) || (next2+10 >= length(s2))
+       break 
+    end
+    
+
     
     %{
-    I_1 = 1:length(match_I1);
-    I_2 = match_I1;
+        s_vector = h__rotateVector(orig_s_vector,12*pi/180);    
+    temp_mid = cur_p+s_vector;
+     norm1 = h__computeNormalVectors2(s_vector,0);
+    norm2 = h__computeNormalVectors2(s_vector,1);
+    h__drawLine(cur_p,temp_mid,'Color','k')
+    h__drawLine(temp_mid,temp_mid+norm1*sc,'Color','r')
+    h__drawLine(temp_mid,temp_mid+norm2*sc,'Color','g')   
+    
+    
     %}
     
-    %The ends don't project well across, so we start at the ends and 
-    %walk a bit towards the center
-    [I_1,I_2] = h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT);
     
-    
-
-    %We'll filter out 
-    is_good = [true; ((I_2(2:end-1) <= I_2(3:end)) & (I_2(2:end-1) >= I_2(1:end-2))); true];
-    
-    I_1(~is_good) = [];
-    I_2(~is_good) = [];
-    
-    
-    s1_x  = s1(I_1,1);
-    s1_y  = s1(I_1,2);
-    s1_px = s2(I_2,1); %s1_pair x
-    s1_py = s2(I_2,2);
-        
-    %TODO: Allow smoothing on x & y
-    skeleton_x = 0.5*(s1_x + s1_px);
-    skeleton_y = 0.5*(s1_y + s1_py);
-    widths1 = sqrt((s1_px-s1_x).^2 + (s1_py - s1_y).^2); %widths
-
-    sx_all{iFrame} = skeleton_x;
-    sy_all{iFrame} = skeleton_y;
-    widths_all{iFrame} = widths1;
-
-    %skeleton_x = csaps(1:length(skeleton_x),skeleton_x,
-
-    
-    %toc
-    %Plotting Results
-    %-------------------
-    if false
-        toc
-        %     plot_s2_match = false;
-        %
-        %     if plot_s2_match
-        %         dp_values = dp_values2;
-        %         match_I   = match_I2;
-        %         [s1,s2]   = deal(s2,s1);
-        %         d_across  = d_across';
-        %     else
-        dp_values = dp_values1;
-        %     end
-        
-        
-        vc_raw  = s1;
-        nvc_raw = s2;
-    
-        clf
-        subplot(2,3,[1 2 4 5])
-        hold on
-        
-        %Raw
-        plot(vc_raw(:,1),vc_raw(:,2),'r.')
-        plot(nvc_raw(:,1),nvc_raw(:,2),'b.')
-        
-        %Smooth
-        plot(s1(2:end-1,1),s1(2:end-1,2),'ro')
-        plot(s2(2:end-1,1),s2(2:end-1,2),'bo')
-        
-        plot(skeleton_x,skeleton_y,'d-')
-        %     plot(fx,fy,'-k')
-        
-        
-        for iPlot = 1:length(s1_x)
-            %I2 = match_I(iPlot);
-            
-            if iPlot == 5 %Start a bit in so we see it
-                c = 'm';
-            elseif abs(dp_values(iPlot)) > 0.99
-                c = 'g';
-            else
-                c = 'k';
-            end
-            x = [s1_x(iPlot) s1_px(iPlot)];
-            y = [s1_y(iPlot) s1_py(iPlot)];
-            %midpoint = [0.5*(x(1)+x(2)),0.5*(y(1)+y(2))];
-            plot(x,y,c)
-            %plot(midpoint(1),midpoint(2),'k.')
-        end
-        
-        %     for iPlot = 1:size(s2,1)
-        %         I1 = match_I2(iPlot);
-        %         x = [s1(I1,1) s2(iPlot,1)];
-        %         y = [s1(I1,2) s2(iPlot,2)];
-        %         midpoint = [0.5*(x(1)+x(2)),0.5*(y(1)+y(2))];
-        %         plot(midpoint(1),midpoint(2),'ko')
-        %     end
-        
-        plot(nw_sx(:,iFrame),nw_sy(:,iFrame),'x','Color',[0.3 0.3 0.3])
-        
-        hold off
-        axis equal
-        
-        subplot(2,3,3)
-        
-        plot(dp_values,'o-')
-        set(gca,'ylim',[-1 -0.5])
-        
-        
-        %Width should really be plotted as a function of distance along the skeleton
-        
-        
-        cum_dist = h__getSkeletonDistance(skeleton_x,skeleton_y);
-        
-        subplot(2,3,6)
-        plot(cum_dist./cum_dist(end),widths1,'r.-')
-        hold on
-        plot(linspace(0,1,49),nw_widths(:,iFrame),'g.-')
-        hold off
-        
-        title(sprintf('iFrame %d',iFrame))
-        
-        if length(frame_values) > 1
-            pause
-        end
-        
     end
+    toc
+    %return
+
+    if length(frame_values) > 1
+        title(sprintf('Frame: %d',iFrame))
+        pause
+    end
+
 end
 toc
 
@@ -255,62 +200,135 @@ toc
 
 end
 
-function [I_1,I_2] = h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_PCT)
+function [width,I] = h__getWidth(temp_mid,end_point,s,indices_to_try,is_side_1)
 
-    end_s1_walk_I = ceil(length(s1)*END_S1_WALK_PCT);
-    end_s2_walk_I = 2*end_s1_walk_I;
-    [p1_I,p2_I] = h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2);
-    
-    match_I1(p1_I) = p2_I;
-    
-    keep_mask = false(1,length(match_I1));
-    keep_mask(p1_I) = true;
-    
-    n_s1 = length(s1);
-    n_s2 = length(s2);
-    end_s1_walk_backwards = n_s1 - end_s1_walk_I;
-    end_s2_walk_backwards = n_s2 - end_s2_walk_I;
-    
-    
-    [p1_I,p2_I] = h__getPartnersViaWalk(n_s1,end_s1_walk_backwards,n_s2,end_s2_walk_backwards,d_across,s1,s2);
-    match_I1(p1_I) = p2_I;
-    keep_mask(p1_I) = true;
-    
-    %anything in between we'll use the projection appproach
-    keep_mask(end_s1_walk_I+1:end_s1_walk_backwards-1) = true;
-    
-    %Always keep ends
-    keep_mask(1)   = true; 
-    keep_mask(end) = true;
+    width = [];
+    for I = indices_to_try
+        
 
-    match_I1(1) = 1;
-    match_I1(end) = length(s2);
-    
+        if intersects(temp_mid,end_point,s(I:I+1,:));
 
-    %This isn't perfect but it removes some back and forth behavior
-    %of the matching. We'd rather drop points and smooth
-    I_1 = find(keep_mask);
-    I_2 = match_I1(keep_mask);
+            [x,y] = getIntersectionPoint(temp_mid,end_point,s(I:I+1,:));
+            width = sqrt((x - temp_mid(1))^2 + (y - temp_mid(2))^2);
+            
+%             hold on
+%             plot(x,y,'ks')
+%             hold off
+            
+            break
+        end
+    end
+    
+    if isempty(width)
+        if is_side_1
+            width = 10000;
+        else
+            width = 1000;
+        end
+    end
+%     if isempty(width)
+%        error('Unable to find intersection point') 
+%     end
+
+
+
 end
 
-function cum_dist = h__getSkeletonDistance(mid_x,mid_y)
-dx = diff(mid_x);
-dy = diff(mid_y);
-d = [0; sqrt(dx.^2+dy.^2)];
-cum_dist = cumsum(d);
+function mask = intersects(A,B,s)
+%I'm not sure that I trust this when the line nearly hits one of the points
+%in the other line
+%
+% dx = B(1) - A(1);
+% dy = B(2) - A(2);
+% 
+% m1 = [-dy*1000 + A(1), dx*1000 + A(2)];
+% m2 = [dy*1000 + A(1), -dx*1000 + A(2)];
+% 
+% s = 11;
+% C = vc(11,:);
+% D = vc(12,:);
+% 
+% intersects(m1,m2,C,D)
+
+C = s(1,:);
+D = s(2,:);
+
+    mask =  ccw(A,C,D) ~= ccw(B,C,D) && ccw(A,B,C) ~= ccw(A,B,D);
 end
 
-function [left_I,right_I] = h__getBounds(n1,n2,p_left,p_right)
-
-pct = linspace(0,1,n1);
-left_pct = pct - p_left;
-right_pct = pct + p_right;
-
-left_I = floor(left_pct*n2);
-right_I = ceil(right_pct*n2);
-left_I(left_I < 1) = 1;
-right_I(right_I > n2) = n2;
+function mask = ccw(A,B,C)
+    mask = ((C(2)-A(2)) * (B(1)-A(1))) >= ((B(2)-A(2)) * (C(1)-A(1)));
 end
+
+function [x,y] = getIntersectionPoint(p1,p2,p34)
+
+%[P1X P1Y P2X P2Y], you must provide two has arguments
+%Example:
+%l1=[93 388 120 354];
+%l2=[102 355 124 377];
+
+l1 = [p1 p2];
+l2 = [p34(1,:) p34(2,:)];
+
+ml1=(l1(4)-l1(2))/(l1(3)-l1(1));
+ml2=(l2(4)-l2(2))/(l2(3)-l2(1));
+bl1=l1(2)-ml1*l1(1);
+bl2=l2(2)-ml2*l2(1);
+b=[bl1 bl2]';
+a=[1 -ml1; 1 -ml2];
+Pint=a\b;
+
+x=Pint(2);
+y=Pint(1);
+
+% % % %http://www.mathworks.com/matlabcentral/fileexchange/32827-lines-intersection/content//findintersection.m
+% % % x1 = p1(1);
+% % % y1 = p1(2);
+% % % x2 = p2(1);
+% % % y2 = p2(2);
+% % % x3 = p34(1,1);
+% % % y3 = p34(1,2);
+% % % x4 = p34(2,1);
+% % % y4 = p34(2,1);
+% % % 
+% % % x = det([det([x1 y1;x2 y2]), (x1-x2);det([x3 y3;x4 y4]), (x3-x4) ])/det([(x1-x2),(y1-y2) ;(x3-x4),(y3-y4)]);
+% % % 
+% % % y = det([det([x1 y1;x2 y2]), (y1-y2);det([x3 y3;x4 y4]), (y3-y4) ])/det([(x1-x2),(y1-y2) ;(x3-x4),(y3-y4)]);
+
+end
+
+
+function dp = h__getDP(side_xy,mid_point,skeleton_norm)
+
+v_to_mid = [side_xy(:,1)-mid_point(1) side_xy(:,2)-mid_point(2)];
+
+v_length = sqrt(sum(v_to_mid.^2,2));
+v_to_mid(:,1) = v_to_mid(:,1)./v_length;
+v_to_mid(:,2) = v_to_mid(:,2)./v_length;
+
+dp = v_to_mid*skeleton_norm';
+
+end
+function result = h__rotateVector(v,angle)
+
+%
+%   v : [1 x 2]
+
+result = v*[cos(angle) sin(angle); -sin(angle) cos(angle)];
+
+end
+function h__drawLine(p1,p2,varargin)
+
+line([p1(:,1) p2(:,1)],[p1(:,2) p2(:,2)],varargin{:});
+end
+
+
+
+function mid = h__getMidpoint(p1,p2)
+mid = 0.5*[p1(1)+p2(1) p1(2)+p2(2)];
+end
+
+
 
 function [dp_values,match_I] = h__getMatches(s1,s2,norm_x,norm_y,dx_across,dy_across,d_across,left_I,right_I)
 
@@ -367,19 +385,20 @@ end
 
 end
 
-function [norm_x,norm_y] = h__computeNormalVectors(data)
+function [norm_x,norm_y] = h__computeNormalVectors(data,option)
 
 dx = gradient(data(:,1));
 dy = gradient(data(:,2));
 
 %This approach gives us -1 for the projection
 %We could also use:
-%dx_norm = -dy;
-%dy_norm = dx;
-%
-%and we would get 1 for the projection
-dx_norm = dy;
-dy_norm = -dx;
+if option == 0
+    dx_norm = -dy;
+    dy_norm = dx;
+else
+    dx_norm = dy;
+    dy_norm = -dx;
+end
 
 vc_d_magnitude = sqrt(dx_norm.^2 + dy_norm.^2);
 
@@ -387,6 +406,27 @@ norm_x = dx_norm./vc_d_magnitude;
 norm_y = dy_norm./vc_d_magnitude;
 
 
+end
+
+function norm_vectors = h__computeNormalVectors2(d_data,option)
+%
+%
+%   d_data : [n x 2]
+%This approach gives us -1 for the projection
+%We could also use:
+if option == 0
+    dx_norm = -d_data(:,2);
+    dy_norm = d_data(:,1);
+else
+    dx_norm = d_data(:,2);
+    dy_norm = -d_data(:,1);
+end
+
+vc_d_magnitude = sqrt(dx_norm.^2 + dy_norm.^2);
+
+norm_x = dx_norm./vc_d_magnitude;
+norm_y = dy_norm./vc_d_magnitude;
+norm_vectors = [norm_x norm_y];
 end
 
 function [dp_value,I,sign_used] = h__getProjectionIndex(vc_dx_ortho,vc_dy_ortho,dx_across_worm,dy_across_worm,left_I,d_across,sign_use)
