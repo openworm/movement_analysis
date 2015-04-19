@@ -243,7 +243,9 @@ for iFrame = frame_values %1:100:4642
         title(sprintf('iFrame %d',iFrame))
         
         if length(frame_values) > 1
-            pause
+            %pause
+            drawnow
+            pause(0.1)
         end
         
     end
@@ -260,6 +262,14 @@ function [I_1,I_2] = h__updateEndsByWalking(d_across,match_I1,s1,s2,END_S1_WALK_
     end_s1_walk_I = ceil(length(s1)*END_S1_WALK_PCT);
     end_s2_walk_I = 2*end_s1_walk_I;
     [p1_I,p2_I] = h__getPartnersViaWalk(1,end_s1_walk_I,1,end_s2_walk_I,d_across,s1,s2);
+    
+%     [wtf,wtf2] = skeletonize(1,end_s1_walk_I,1,1,end_s2_walk_I,1,s1,s2,false);
+%     
+%     wtf3 = zeros(1,36);
+%     for i = 1:36
+%         wtf3(i) = d_across(p1_I(i),p2_I(i));
+%     end
+    
     
     match_I1(p1_I) = p2_I;
     
@@ -462,6 +472,8 @@ function [p1_I,p2_I] = h__getPartnersViaWalk(s1,e1,s2,e2,d,xy1,xy2)
 %
 %
 
+%https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bcv/skeletonize.m
+
 
 %TODO: remove hardcode
 p1_I = zeros(1,200);
@@ -483,22 +495,24 @@ while c1 ~= e1 && c2 ~= e2
         next2 = c2+1;
     end
     
-    scatter(xy1(:,1),xy1(:,2))
-    hold on
-    scatter(xy2(:,1),xy2(:,2))
-    plot(xy1(c1,1),xy1(c1,2),'+k')
-    plot(xy2(c2,1),xy2(c2,2),'+r')
-    plot(xy1(next1,1),xy1(next1,2),'dk')
-    plot(xy2(next2,1),xy2(next2,2),'dr')    
-    hold off
-    axis equal
+%     scatter(xy1(:,1),xy1(:,2))
+%     hold on
+%     scatter(xy2(:,1),xy2(:,2))
+%     plot(xy1(c1,1),xy1(c1,2),'+k')
+%     plot(xy2(c2,1),xy2(c2,2),'+r')
+%     plot(xy1(next1,1),xy1(next1,2),'dk')
+%     plot(xy2(next2,1),xy2(next2,2),'dr')    
+%     hold off
+%     axis equal
     
     v_n1c1 = xy1(next1,:) - xy1(c1,:);
+    
+    %v_n2c2 = xy1(next2,:) - xy1(c2,:);
     v_n2c2 = xy2(next2,:) - xy2(c2,:);
     
     d_n1n2 = d(next1,next2);
-    d_n1c2 = d(next1,c2);
-    d_n2c1 = d(c1,next2);
+    d_n1c2 = d(next1,c2); %d1
+    d_n2c1 = d(c1,next2); %d2
     
     
     if d_n1c2 == d_n2c1 || (d_n1n2 <= d_n1c2 && d_n1n2 <= d_n2c1)
@@ -510,7 +524,11 @@ while c1 ~= e1 && c2 ~= e2
         c1 = next1;
         c2 = next2;
         option = 1;
-    elseif all((v_n1c1.*v_n2c2) > -1)
+    elseif v_n1c1*v_n2c2' > 0
+    %Bug in old code
+    %* Contour was the same, so this somehow never got caught
+    %* Changed new code to a true dot product
+    %elseif all((v_n1c1.*v_n2c2) > -1)
         %contours go similar directions
         %follow smallest width
         if d_n1c2 < d_n2c1
@@ -550,6 +568,8 @@ while c1 ~= e1 && c2 ~= e2
             c2 = next2;
             option = 4;
         elseif d_n1c2 < d_n2c1
+            %d1 < d2
+            %use d1 i.e. n1,c2
             p1_I(cur_p_I) = next1;
             p2_I(cur_p_I) = c2;
             c1 = next1;
@@ -563,15 +583,15 @@ while c1 ~= e1 && c2 ~= e2
         
     end
     
-    fprintf(1,'Option: %d\n',option);
-    for line_I = 1:cur_p_I
-       cur_1I = p1_I(line_I);
-       cur_2I = p2_I(line_I);
-       line([xy1(cur_1I,1),xy2(cur_2I,1)],[xy1(cur_1I,2),xy2(cur_2I,2)],'Color','k')
-    end
-    cur_1I = p1_I(cur_p_I);
-    cur_2I = p2_I(cur_p_I);
-    line([xy1(cur_1I,1),xy2(cur_2I,1)],[xy1(cur_1I,2),xy2(cur_2I,2)],'Color','k')
+%     fprintf(1,'Option: %d\n',option);
+%     for line_I = 1:cur_p_I
+%        cur_1I = p1_I(line_I);
+%        cur_2I = p2_I(line_I);
+%        line([xy1(cur_1I,1),xy2(cur_2I,1)],[xy1(cur_1I,2),xy2(cur_2I,2)],'Color','k')
+%     end
+%     cur_1I = p1_I(cur_p_I);
+%     cur_2I = p2_I(cur_p_I);
+%     line([xy1(cur_1I,1),xy2(cur_2I,1)],[xy1(cur_1I,2),xy2(cur_2I,2)],'Color','k')
     
 end
 
