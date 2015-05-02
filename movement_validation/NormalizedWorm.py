@@ -20,6 +20,8 @@ from scipy.signal import savgol_filter as sgolay
 from . import config
 from . import utils
 
+from .features import feature_comparisons as fc
+
 import time
 
 class NormalizedWorm(object):
@@ -116,22 +118,25 @@ class NormalizedWorm(object):
             
         vulva_contours and non_vulva_contours should start and end at the same locations, from head to tail
 
-        """
+        """     
         
         #TODO: Skeletons are optional, but at some point we'll probably need
         #to make contours optional as well        
         
         #TODO: Do I want to grab the skeletons from here????
         t = time.time()
+
+        #The # of points in the skeleton changes on a per frame basis. If we use
+        #any old parameters based on the passed in skeleton and the new widths,
+        #we will have a length mismatch        
+        
         widths,skeletons = WormParsing.computeWidths(self,vulva_contours,non_vulva_contours)            
         self.widths = WormParsing.normalizeAllFrames(self,widths,skeletons)        
         elapsed = time.time() - t
-        print('Elapsed time: %g'%(t))        
+        print('Elapsed time: %g'%(elapsed))        
 
-        import pdb  
-        pdb.set_trace()  
         
-        self.angles = WormParsing.calculateAngles(skeletons)        
+        self.angles = WormParsing.calculateAngles(self,skeletons)        
         
         #t = time.time()
         self.skeletons = WormParsing.normalizeAllFramesXY(self,skeletons)   
@@ -141,8 +146,7 @@ class NormalizedWorm(object):
         
         self.lengths = WormParsing.computeSkeletonLengths(self,skeletons)
   
-        import pdb  
-        pdb.set_trace()  
+          
         
     
         
@@ -180,7 +184,7 @@ class NormalizedWorm(object):
         #7) in_out_touches ????? 49 x n_frames
         #8) DONE lengths : numpy.array
           - (nframes,)
-        #9) widths : numpy.array
+        #9) DONE widths : numpy.array
           - (49,n_frames)
         #10) head_areas
         #11) tail_areas
@@ -192,8 +196,8 @@ class NormalizedWorm(object):
             
             
         
-        import pdb
-        pdb.set_trace()
+        #import pdb
+        #pdb.set_trace()
     
 
     
@@ -645,6 +649,30 @@ class NormalizedWorm(object):
     def skeleton_y(self):
         return self.skeletons[:, 1, :]
 
+    def __eq__(self,other):
+        import pdb
+        pdb.set_trace()
+
+        #Jim at this point
+
+        x1 = self.skeleton_x.flatten()
+        x2 = other.skeleton_x.flatten()
+        y1 = self.skeleton_y.flatten()
+        y2 = other.skeleton_y.flatten()
+        
+        #TODO: Do this on a frame by frame basis, do some sort of distance 
+        #computation rather than all together. This might hide bad frames        
+        
+        fc.corr_value_high(x1,x2,'asdf')
+        fc.corr_value_high(y1,y2,'asdf')
+
+        #return \
+            #fc.corr_value_high(self.length, other.length, 'morph.length')  and \
+            #self.width == other.width and \
+            #fc.corr_value_high(self.area, other.area, 'morph.area')      and \
+            #fc.corr_value_high(self.area_per_length, other.area_per_length, 'morph.area_per_length') and \
+            #fc.corr_value_high(self.width_per_length, other.width_per_length, 'morph.width_per_length')
+
     def __repr__(self):
         #TODO: This omits the properties above ...
         return utils.print_object(self)
@@ -923,7 +951,7 @@ class WormParsing(object):
                 c1 = next1;
                 c2 = next2;
                 
-            elif np.all((v_n1c1*v_n2c2) > -1):
+            elif np.sum((v_n1c1*v_n2c2) > 0):
                 #contours go similar directions
                 #follow smallest width
                 if d_n1c2 < d_n2c1:
@@ -1207,7 +1235,7 @@ class WormParsing(object):
             else:
                 sx = cur_frame_value[0,:]
                 sy = cur_frame_value[1,:]
-                cc = self._computeChainCodeLengths(sx,sy)
+                cc = WormParsing.computeChainCodeLengths(sx,sy)
     
                 #This is from the old code
                 edge_length = cc[-1]/12               

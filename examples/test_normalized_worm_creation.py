@@ -49,6 +49,10 @@ def main():
     nw2 = NormalizedWorm(eid.all_skeletons,eid.all_vulva_contours,
                          eid.all_non_vulva_contours,eid.is_valid)
     
+    
+    nw == nw2
+    
+    
     import pdb
     pdb.set_trace()
     
