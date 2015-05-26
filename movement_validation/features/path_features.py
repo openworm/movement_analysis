@@ -181,7 +181,7 @@ class Duration(object):
 
     """
 
-    def __init__(self, features_ref):
+    def __init__(self, features_ref, explain=[]):
 
         options = features_ref.options
         
@@ -312,6 +312,12 @@ class Duration(object):
         self.midbody = temp_duration[2]
         self.tail = temp_duration[3]
 
+        if 'duration' in explain:
+            self.explain();
+
+    def explain(self, contour_x, contour_y, mean_cx, mean_cy, x_centroid_cx, y_centroid_cy):
+
+
     def __eq__(self, other):
 
         return True
@@ -437,7 +443,7 @@ class Arena(object):
         return self
 
 
-def worm_path_curvature(features_ref):
+def worm_path_curvature(features_ref, explain=[]):
     """
     Parameters:
     -----------
@@ -503,4 +509,10 @@ def worm_path_curvature(features_ref):
     with np.errstate(invalid='ignore'):
         distance[distance < 1] = np.NAN
 
+
+    if 'curvature' in explain:
+        
+
     return (diff_motion / distance) * (np.pi / 180)
+
+

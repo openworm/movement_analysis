@@ -10,6 +10,8 @@ from .. import utils
 
 from . import feature_comparisons as fc
 
+from matplotlib import pyplot as plt
+
 class Widths(object):
     """
     Attributes
@@ -21,7 +23,7 @@ class Widths(object):
     
     fields = ('head', 'midbody', 'tail')
     
-    def __init__(self,features_ref):
+    def __init__(self,features_ref, explain=[]):
         """
         Parameters
         ----------
@@ -34,6 +36,25 @@ class Widths(object):
     
         for partition in self.fields:
             setattr(self,partition, np.mean(nw.get_partition(partition, 'widths'),0))
+
+        if 'width' in explain:
+            self.explain(nw)
+
+    def explain(self, nw):
+        text1 = '''The worm segments are grouped into head, midbody, and tail. The plot below shows the widths for each section
+        color coded by section.'''
+
+        head = nw.get_partition('head','widths')
+        mid = nw.get_partition('midbody','widths')
+        tail = nw.get_partition('tail','widths')
+
+
+
+
+
+        text2 = ''''''
+
+
     
     @classmethod
     def from_disk(cls,width_ref):
