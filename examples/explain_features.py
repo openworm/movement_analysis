@@ -64,7 +64,7 @@ def main():
 
     print(explain)
 
-    openworm_features = WormFeatures(nw,vi, explain=explain) #need to add flags to functions to enable expaination output
+    openworm_features = WormFeatures(nw, explain=explain) #need to add flags to functions to enable expaination output
 
 
 if __name__ == '__main__':
