@@ -29,9 +29,7 @@ import warnings
 
 from .. import utils
 
-from . import feature_comparisons as fc
-
-
+#%%
 class LocomotionBend(object):
     
     """
@@ -64,10 +62,10 @@ class LocomotionBend(object):
         #and the old version works incorrectly but was convoluted enough that
         #it was hard to replicate        
         
-        return fc.corr_value_high(self.amplitude, other.amplitude,
+        return utils.correlation(self.amplitude, other.amplitude,
                                   'locomotion.bends.' + self.name + '.amplitude',
                                   merge_nans=True) and \
-             fc.corr_value_high(self.frequency, other.frequency, 
+             utils.correlation(self.frequency, other.frequency, 
                                 'locomotion.bends.' + self.name + '.frequency',
                                 merge_nans=True)   
 
@@ -204,7 +202,11 @@ class LocomotionCrawlingBends(object):
             # frames
         
             s = slice(*options.bends_partitions[cur_partition_name])
-            avg_bend_angles = np.nanmean(bend_angles[s, :],axis=0)
+
+            # Suppress RuntimeWarning: Mean of empty slice
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
+                avg_bend_angles = np.nanmean(bend_angles[s, :], axis=0)
 
             # Ensure there are both data and gaps if we are going to
             # interpolate - i.e.:
@@ -225,18 +227,20 @@ class LocomotionCrawlingBends(object):
 
         timer.toc('locomotion.crawling_bends')
 
+
     def h__getBendData(self, avg_bend_angles, bound_info, options, cur_partition, fps):
         """
         Compute the bend amplitude and frequency.
 
         Parameters
         ----------
-        avg_bend_angles : numpy.array
+        avg_bend_angles: numpy.array
             - [1 x n_frames]
-        bound_info :
-        options : movement_validation.features.feature_processing_options.LocomotionCrawlingBends
-        cur_partition :
-        fps : 
+        bound_info:
+        options: movement_validation.features.feature_processing_options.LocomotionCrawlingBends
+        cur_partition:
+        fps: float
+            Frames Per Second
 
 
         Returns
@@ -246,17 +250,17 @@ class LocomotionCrawlingBends(object):
         
         # Compute the short-time Fourier transforms (STFT).
         #--------------------------------------------------
-        #Unpack options ...
-        max_freq = options.max_frequency
+        # Unpack options ...
+        max_freq = options.max_frequency(fps)
         min_freq = options.min_frequency
         fft_n_samples = options.fft_n_samples
         max_amp_pct_bandwidth = options.max_amplitude_pct_bandwidth
         peak_energy_threshold = options.peak_energy_threshold
 
         # Maximum index to keep for frequency analysis:
-        fft_max_I   = fft_n_samples / 2
+        fft_max_I   = int(fft_n_samples / 2)
 
-        #This gets multiplied by an index to compute the frequency at that index
+        # This gets multiplied by an index to compute the frequency at that index
         freq_scalar = (fps / 2) * 1 / (fft_max_I - 1)
 
         n_frames = len(avg_bend_angles)
@@ -267,9 +271,15 @@ class LocomotionCrawlingBends(object):
         right_bounds = bound_info.right_bounds
         is_bad_mask  = bound_info.is_bad_mask
         
-        #This is a processing optimization that in general will speed things up
-        max_freq_I = max_freq/freq_scalar        
-        INIT_MAX_I_FOR_BANDWIDTH = round(options.initial_max_I_pct * max_freq_I)        
+        # This is a processing optimization that in general will speed 
+        # things up
+        max_freq_I = max_freq/freq_scalar
+        INIT_MAX_I_FOR_BANDWIDTH = \
+            round(options.initial_max_I_pct * max_freq_I)        
+        
+        # Convert each element from float to int
+        right_bounds = right_bounds.astype(int)
+        left_bounds = left_bounds.astype(int)
         
         for iFrame in np.flatnonzero(~is_bad_mask):
             windowed_data   = avg_bend_angles[left_bounds[iFrame]:right_bounds[iFrame]]
@@ -280,9 +290,12 @@ class LocomotionCrawlingBends(object):
             #
             # Compute the real part of the STFT.
             # These two steps take a lot of time ...
-            fft_data = np.fft.fft(windowed_data, fft_n_samples)
-            fft_data = abs(fft_data[:fft_max_I])
-
+            #fft_data = np.fft.rfft(windowed_data, fft_n_samples)
+            #fft_data = abs(fft_data[:fft_max_I])
+            
+            #it is faster to use rfft, than using fft and abs to obtain the real part of the transform
+            fft_data = np.fft.rfft(windowed_data, fft_n_samples)
+            
             # Find the peak frequency.
             maxPeakI = np.argmax(fft_data)
             maxPeak  = fft_data[maxPeakI]
@@ -405,7 +418,7 @@ class LocomotionCrawlingBends(object):
                                                              use_max=False,
                                                              value_cutoff=np.inf)
 
-            del min_peaks   # this part of max_peaks_dist's return is unused
+            del(min_peaks)  # This part of max_peaks_dist's return is unused
 
             peak_start_I = min_peaks_I[utils.find(min_peaks_I < max_peak_I,1)]
             peak_end_I   = min_peaks_I[utils.find(min_peaks_I > max_peak_I,1)]
@@ -432,12 +445,7 @@ class LocomotionCrawlingBends(object):
             self.midbody == other.midbody and \
             self.tail == other.tail
 
-"""
-===============================================================================
-===============================================================================
-"""
-
-
+#%%
 class LocomotionForagingBends(object):
 
     """
@@ -471,12 +479,12 @@ class LocomotionForagingBends(object):
         """
         Initialize an instance of LocomotionForagingBends
 
-
         Parameters
         ----------  
         nw: NormalizedWorm instance
         is_segmented_mask: boolean numpy array [1 x n_frames]
-        ventral_mode: boolean numpy array [1 x n_frames]
+        ventral_mode: int
+            0, 1, or 2 depending on the orientation of the worm.
 
         """
         
@@ -494,16 +502,16 @@ class LocomotionForagingBends(object):
         # self.amplitude  = None  # DEBUG
         # self.angleSpeed = None # DEBUG
 
-        nw  = features_ref.nw
-        
-        
-
         fps = features_ref.video_info.fps
 
-        nose_x, nose_y = nw.get_partition('head_tip', data_key='skeletons',
+        nose_x, nose_y = \
+            features_ref.nw.get_partition('head_tip', 
+                                          data_key='skeleton',
                                           split_spatial_dimensions=True)
 
-        neck_x, neck_y = nw.get_partition('head_base', data_key='skeletons',
+        neck_x, neck_y = \
+            features_ref.nw.get_partition('head_base', 
+                                          data_key='skeleton',
                                           split_spatial_dimensions=True)
 
         # TODO: Add "reversed" and "interpolated" options to the get_partition
@@ -531,7 +539,7 @@ class LocomotionForagingBends(object):
         # utils.interpolate_with_threshold code.
         interp = utils.interpolate_with_threshold_2D
 
-        max_samples_interp = options.max_samples_interp_nose
+        max_samples_interp = options.max_samples_interp_nose(fps)
 
         nose_xi = interp(nose_x, threshold=max_samples_interp)
         nose_yi = interp(nose_y, threshold=max_samples_interp)
@@ -547,7 +555,8 @@ class LocomotionForagingBends(object):
         # Step 3:
         #---------------------------------------
         [nose_amps, nose_freqs] = \
-            self.h__foragingData(fps, nose_bends, options.min_nose_window_samples)
+            self.h__foragingData(fps, nose_bends, 
+                                 options.min_nose_window_samples(fps))
 
         if ventral_mode > 1:
             nose_amps = -nose_amps
@@ -620,8 +629,11 @@ class LocomotionForagingBends(object):
         Simple helper for h__computeNoseBends
 
         """
-        avg_diff_x = np.nanmean(np.diff(x, n=1, axis=0), axis=0)
-        avg_diff_y = np.nanmean(np.diff(y, n=1, axis=0), axis=0)
+        # Suppress RuntimeWarning: Mean of empty slice
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            avg_diff_x = np.nanmean(np.diff(x, n=1, axis=0), axis=0)
+            avg_diff_y = np.nanmean(np.diff(y, n=1, axis=0), axis=0)
 
         angles = np.arctan2(avg_diff_y, avg_diff_x)
 
@@ -765,9 +777,10 @@ class LocomotionForagingBends(object):
         return utils.print_object(self)
         
     def __eq__(self, other):
-        return fc.corr_value_high(self.amplitude, other.amplitude, 'locomotion.foraging.amplitude') and \
-             fc.corr_value_high(self.angle_speed, other.angle_speed, 'locomotion.foraging.angle_speed')     
+        return utils.correlation(self.amplitude, other.amplitude, 'locomotion.foraging.amplitude') and \
+             utils.correlation(self.angle_speed, other.angle_speed, 'locomotion.foraging.angle_speed')     
 
+#%%
 class CrawlingBendsBoundInfo(object):
     
     """
@@ -839,17 +852,16 @@ class CrawlingBendsBoundInfo(object):
             (right_bounds > n_frames) | \
             is_paused
             
-    def h__getBoundingZeroIndices(self, avg_bend_angles, min_win_size):
+    def h__getBoundingZeroIndices(self, avg_bend_angles, min_number_frames_for_bend):
         """
         The goal of this function is to bound each index of avg_bend_angles by 
         sign changes.
 
-        #TODO: rename min_win_size to min_number_frames_for_bend
 
         Parameters:
         -----------
         avg_bend_angles : [1 x n_frames]
-        min_win_size    : int
+        min_number_frames_for_bend    : int
           The minimum size of the data window
 
         Returns
@@ -863,7 +875,7 @@ class CrawlingBendsBoundInfo(object):
         Notes
         ----------------------
         Formerly [back_zeros_I,front_zeros_I] = \
-                h__getBoundingZeroIndices(avg_bend_angles,min_win_size)
+                h__getBoundingZeroIndices(avg_bend_angles,min_number_frames_for_bend)
 
         """
 
@@ -886,6 +898,11 @@ class CrawlingBendsBoundInfo(object):
         
         sign_change_I = np.flatnonzero(sign_change_mask)
         n_sign_changes = len(sign_change_I)
+        n_frames = len(avg_bend_angles)
+        
+        if n_sign_changes == 0:
+            #no changes of sign return two zeros arrays
+            return [np.zeros(n_frames),np.zeros(n_frames)]
 
         """
         To get the correct frame numbers, we need to do the following 
@@ -929,7 +946,7 @@ class CrawlingBendsBoundInfo(object):
         We've gone too far, nothing at index 0, set to invalid
         """
 
-        n_frames = len(avg_bend_angles)
+        
 
         #For each element, determine the indices to the left and right of the
         #element at which a sign change occurs.
@@ -989,6 +1006,10 @@ class CrawlingBendsBoundInfo(object):
             if cur_left_index == BAD_INDEX_VALUE or cur_right_index == BAD_INDEX_VALUE:
                 continue
 
+            # Convert from float to int
+            cur_left_index = int(cur_left_index)
+            cur_right_index = int(cur_right_index)
+
             back_zero_I = left_values[cur_left_index]
             front_zero_I = right_values[cur_right_index]
 
@@ -1020,14 +1041,14 @@ class CrawlingBendsBoundInfo(object):
             #
             # so in reality we should use:
             #
-            # front_zero_I - iFrame < min_win_size/2 and
-            # iFrame - back_zero_I < min_win_size/2
+            # front_zero_I - iFrame < min_number_frames_for_bend/2 and
+            # iFrame - back_zero_I < min_number_frames_for_bend/2
             #
             # By not doing this, we overshoot the minimum window size that
             # we need to use. Consider window sizes that are in terms of
             # the minimum window size.
             #
-            # i.e. 0.5w means the left or right window is half min_win_size
+            # i.e. 0.5w means the left or right window is half min_number_frames_for_bend
             #
             # Consider we have:
             # 0.5w left
@@ -1037,7 +1058,7 @@ class CrawlingBendsBoundInfo(object):
             #
             #   But in reality, if we stopped now we would be at twice 0.5w
 
-            while (front_zero_I - back_zero_I + 1) < min_win_size:
+            while (front_zero_I - back_zero_I + 1) < min_number_frames_for_bend:
                 # Expand the smaller of the two windows
                 # -------------------------------------
                 #  left_window_size       right_window_size
@@ -1061,3 +1082,4 @@ class CrawlingBendsBoundInfo(object):
                 front_zeros_I[iFrame] = front_zero_I
 
         return [back_zeros_I, front_zeros_I]
+

@@ -1,12 +1,15 @@
 movement\_validation
 ====================
 
+.. image:: https://travis-ci.org/openworm/movement_validation.svg?branch=master
+    :target: https://travis-ci.org/openworm/movement_validation
+
 |Gitter|
 
 .. figure:: https://github.com/openworm/movement_validation/blob/master/documentation/images/Test%20process.png?raw=true
    :alt: 
 
-Images: C. elegans by Bob Goldstein, UNC Chapel Hill
+Images: *C. elegans* by Bob Goldstein, UNC Chapel Hill
 http://bio.unc.edu/people/faculty/goldstein/ Freely licensed. Contour
 credit: MRC Schafer Lab. Simulated worm: OpenWorm.
 
@@ -25,10 +28,10 @@ sub-project of the `OpenWorm project <https://github.com/openworm>`__.
 It is only about 50% complete. Please see:
 
 -  `Installation
-   Guide <https://github.com/openworm/movement_validation/blob/master/INSTALL.md>`__
+   Guide <https://github.com/openworm/movement_validation/blob/master/INSTALL.rst>`__
 
 -  `Guide for
-   Contributors <https://github.com/openworm/movement_validation/blob/master/documentation/Guide%20for%20contributors.md>`__
+   Contributors <https://github.com/openworm/movement_validation/blob/master/documentation/Guide%20for%20contributors.rst>`__
 
 -  `Current Code
    Progress <https://docs.google.com/spreadsheets/d/1dW1ukYlTu4vbm35bkf8MIZ3obP37yrKFz12X84ukOTU/edit?usp=sharing>`__

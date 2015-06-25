@@ -14,7 +14,6 @@ import numpy as np
 from .. import utils
 
 from . import events
-from . import feature_comparisons as fc
 # To avoid conflicting with variables named 'velocity', we 
 # import this as 'velocity_module':
 from . import velocity as velocity_module 
@@ -42,9 +41,9 @@ class LocomotionVelocityElement(object):
         self.direction = direction
         
     def __eq__(self, other):
-        return fc.corr_value_high(self.speed,other.speed,
+        return utils.correlation(self.speed,other.speed,
                                   'locomotion.velocity.' + self.name + '.speed') and \
-               fc.corr_value_high(self.direction,other.direction,
+               utils.correlation(self.direction,other.direction,
                                   'locomotion.velocity.' + self.name + '.direction')
     def __repr__(self):
         return utils.print_object(self)         
@@ -84,47 +83,37 @@ class LocomotionVelocity(object):
     #       this set of partitions does not cover the neck and hips
     attribute_keys = ['head_tip', 'head', 'midbody', 'tail', 'tail_tip']
     
-    def __init__(self,features_ref,ventral_mode=0):
+    def __init__(self, features_ref):
         """
-            THIS IS OUT OF DATE
             nw : a NormalizedWorm instance
 
-        ventral_mode: int
-        The ventral side mode:
-        0 = unknown
-        1 = clockwise
-        2 = anticlockwise
         """
-        #TODO: Ventral mode needs to be handled differently
-        
-        nw = features_ref.nw
-
         timer = features_ref.timer
         timer.tic()
-
-        all_options = features_ref.options
-    
-        locomotion_options = all_options.locomotion
         
-        fps = features_ref.video_info.fps
+        nw = features_ref.nw
+        ventral_mode = nw.video_info.ventral_mode
+        fps          = nw.video_info.fps
     
-        #We need this for the midbody_distance calculation
+        # We need this for the midbody_distance calculation
         self.fps = fps    
     
-        data_keys = list(self.attribute_keys) #Make a copy. Data keys will 
-        #correspond to sections of the skeleton. Attribute keys correspond to 
-        #attributes of this class.
-
-        if(all_options.mimic_old_behaviour):
+        # Make a copy:
+        # - Data keys will correspond to sections of the skeleton.
+        # - Attribute keys correspond to attributes of this class.
+        data_keys = list(self.attribute_keys) 
+        
+        if(features_ref.options.mimic_old_behaviour):
             data_keys[2] = 'old_midbody_velocity'
 
-        #Step 1: Compute the average body angle
-        #---------------------------------------------------------
+        # Step 1: Compute the average body angle
+        # ---------------------------------------------------------
         avg_body_angle = velocity_module.get_partition_angles(nw, 
                                           partition_key='body',
-                                          data_key='skeletons',
+                                          data_key='skeleton',
                                           head_to_tail=False)
 
+        locomotion_options = features_ref.options.locomotion
         sample_time_values = {
             'head_tip': locomotion_options.velocity_tip_diff,
             'head':     locomotion_options.velocity_body_diff,
@@ -133,17 +122,19 @@ class LocomotionVelocity(object):
             'tail_tip': locomotion_options.velocity_tip_diff
         }
 
-        #Step 2: Run the compute_velocity function on the different parts of
-        #the body, 
+        # Step 2: Run the compute_velocity function on the different 
+        # parts of the body, 
         for attribute_key, data_key in zip(self.attribute_keys, data_keys):
-            x, y = nw.get_partition(data_key, 'skeletons', True)
+            x, y = nw.get_partition(data_key, 'skeleton', True)
 
             speed, direction = velocity_module.compute_velocity(fps, x, y,
                                             avg_body_angle,
                                             sample_time_values[attribute_key],
                                             ventral_mode)[0:2]
                                             
-            setattr(self,attribute_key,LocomotionVelocityElement(attribute_key,speed,direction))                                
+            setattr(self,
+                    attribute_key,
+                    LocomotionVelocityElement(attribute_key, speed, direction))                                
 
         timer.toc('locomotion.velocity')
 
@@ -163,7 +154,8 @@ class LocomotionVelocity(object):
     def __eq__(self, other):
         is_same = True
         for attribute_key in self.attribute_keys:
-            is_same = getattr(self,attribute_key) == getattr(other,attribute_key)
+            is_same = \
+                getattr(self, attribute_key) == getattr(other, attribute_key)
             if not is_same:
                 break
 

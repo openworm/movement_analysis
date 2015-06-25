@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 
 from .. import utils
 
-from . import feature_comparisons as fc
 # To avoid conflicting with variables named 'velocity', we 
 # import this as 'velocity_module':
 from . import velocity as velocity_module 
@@ -47,8 +46,8 @@ class Coordinates(object):
         
     def __eq__(self, other):
         return \
-            fc.corr_value_high(self.x, other.x, 'path.coordinates.x') and \
-            fc.corr_value_high(self.y, other.y, 'path.coordinates.y')      
+            utils.correlation(self.x, other.x, 'path.coordinates.x') and \
+            utils.correlation(self.y, other.y, 'path.coordinates.y')      
 
 class Range(object):
 
@@ -165,7 +164,7 @@ class Range(object):
 
     def __eq__(self, other):
 
-        return fc.corr_value_high(self.value, other.value, 'path.range', 0.99)
+        return utils.correlation(self.value, other.value, 'path.range', 0.99)
 
 
 class Duration(object):
@@ -240,6 +239,10 @@ class Duration(object):
         arena_size = [
             y_scaled_max - y_scaled_min + 1, x_scaled_max - x_scaled_min + 1]
         ar = Arena(sx, sy, arena_size)
+
+        # Arena_size must be a list of whole numbers or else we'll get an
+        # error when calling np.zeroes(arena_size) later on
+        arena_size = np.array(arena_size, dtype=int)
 
         #----------------------------------------------------------------------
         def h__populateArenas(arena_size, sys, sxs, s_points, isnan_mask):
@@ -377,8 +380,8 @@ class DurationElement(object):
     def __eq__(self, other):
 
         return \
-            fc.corr_value_high(self.indices, other.indices, 'Duration.indices') and \
-            fc.corr_value_high(self.times, other.times, 'Duration.times')
+            utils.correlation(self.indices, other.indices, 'Duration.indices') and \
+            utils.correlation(self.times, other.times, 'Duration.times')
 
     @classmethod
     def from_disk(cls, saved_duration_elem):
@@ -419,12 +422,12 @@ class Arena(object):
         # NOTE: Due to rounding differences between Matlab and numpy
         # the height and width values are different by 1
         return \
-            fc.fp_isequal(self.height, other.height, 'Arena.height', 1) and \
-            fc.fp_isequal(self.width, other.width, 'Arena.width', 1)   and \
-            fc.fp_isequal(self.min_x, other.min_x, 'Arena.min_x')   and \
-            fc.fp_isequal(self.min_y, other.min_y, 'Arena.min_y')   and \
-            fc.fp_isequal(self.max_x, other.max_x, 'Arena.max_x')   and \
-            fc.fp_isequal(self.max_y, other.max_y, 'Arena.max_y')
+            utils.compare_is_equal(self.height, other.height, 'Arena.height', 1) and \
+            utils.compare_is_equal(self.width, other.width, 'Arena.width', 1)   and \
+            utils.compare_is_equal(self.min_x, other.min_x, 'Arena.min_x')   and \
+            utils.compare_is_equal(self.min_y, other.min_y, 'Arena.min_y')   and \
+            utils.compare_is_equal(self.max_x, other.max_x, 'Arena.max_x')   and \
+            utils.compare_is_equal(self.max_y, other.max_y, 'Arena.max_y')
 
     def __repr__(self):
         return utils.print_object(self)
@@ -455,10 +458,10 @@ def worm_path_curvature(features_ref, explain=[]):
     BODY_DIFF = 0.5
 
     nw = features_ref.nw
-    x = nw.x
-    y = nw.y
+    x = nw.skeleton_x
+    y = nw.skeleton_y
     fps = features_ref.video_info.fps
-    ventral_mode = nw.ventral_mode    
+    ventral_mode = nw.video_info.ventral_mode    
 
     # https://github.com/JimHokanson/SegwormMatlabClasses/blob/master/%2Bseg_worm/%2Bfeatures/%40path/wormPathCurvature.m
 
@@ -477,7 +480,7 @@ def worm_path_curvature(features_ref, explain=[]):
                                          avg_body_angles_d, BODY_DIFF, ventral_mode)
 
     frame_scale = velocity_module.get_frames_per_sample(fps, BODY_DIFF)
-    half_frame_scale = (frame_scale - 1) / 2
+    half_frame_scale = int((frame_scale - 1) / 2)
 
     # Compute the angle differentials and distances.
     speed = np.abs(speed)

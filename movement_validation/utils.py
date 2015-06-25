@@ -12,6 +12,8 @@ from itertools import groupby
 import csv
 import matplotlib.pyplot as plt
 import numpy as np
+import sys, time
+
 
 __ALL__ = ['scatter',
            'plotxy',
@@ -25,7 +27,9 @@ __ALL__ = ['scatter',
            'interpolate_with_threshold',
            'interpolate_with_threshold_2D',
            'gausswin',
-           '_extract_time_from_disk']
+           '_extract_time_from_disk',
+           'timing_function',
+           'ElementTimer']
 
 
 def scatter(x, y):
@@ -221,16 +225,24 @@ def colon(r1, inc, r2):
     s = np.sign(inc)
 
     if s == 0:
-        return np.zeros(1)
+        return_value = np.zeros(1)
     elif s == 1:
         n = ((r2 - r1) + 2 * np.spacing(r2 - r1)) // inc
-        return np.linspace(r1, r1 + inc * n, n + 1)
+        return_value = np.linspace(r1, r1 + inc * n, n + 1)
     else:  # s == -1:
         # NOTE: I think this is slightly off as we start on the wrong end
         # r1 should be exact, not r2
         n = ((r1 - r2) + 2 * np.spacing(r1 - r2)) // np.abs(inc)
         temp = np.linspace(r2, r2 + np.abs(inc) * n, n + 1)
-        return temp[::-1]
+        return_value = temp[::-1]
+    
+    # If the start and steps are whole numbers, we should cast as int
+    if(np.equal(np.mod(r1,1),0) and 
+       np.equal(np.mod(s,1),0) and
+       np.equal(np.mod(r2,1),0)):
+        return return_value.astype(int)
+    else:
+        return return_value
 
 
 def print_object(obj):
@@ -254,7 +266,7 @@ def print_object(obj):
 
     dict_local = obj.__dict__
 
-    key_names = [x for x in dict_local]
+    key_names = [k for k in dict_local]
     key_lengths = [len(x) for x in key_names]
 
     if len(key_lengths) == 0:
@@ -277,21 +289,36 @@ def print_object(obj):
     value_strings = []
     for key in dict_local:
         value = dict_local[key]
-        try:  # Not sure how to test for classes :/
-            class_name = value.__class__.__name__
-            module_name = inspect.getmodule(value).__name__
-            temp_str = 'Class::' + module_name + '.' + class_name
-        except:
-            temp_str = repr(value)
-            if len(temp_str) > max_value_length:
-                #type_str = str(type(value))
-                #type_str = type_str[7:-2]
-                try:
-                    len_value = len(value)
-                except:
-                    len_value = 1
-                temp_str = str.format(
-                    'Type::{}, Len: {}', type(value).__name__, len_value)
+        run_extra_code = False
+        if hasattr(value,'__dict__'):
+            try:  # Not sure how to test for classes :/
+                class_name = value.__class__.__name__
+                module_name = inspect.getmodule(value).__name__
+                temp_str = 'Class::' + module_name + '.' + class_name
+            except:
+                run_extra_code = True
+        else:
+            run_extra_code = True
+            
+        if run_extra_code:
+            #TODO: Change length to shape if available
+            if type(value) is list and len(value) > max_value_length:
+                len_value = len(value)
+                temp_str = 'Type::List, Len %d'%len_value
+            else:
+                #Perhaps we want str instead?
+                #Changed from repr to str because things Python was not
+                #happy with lists of numpy arrays
+                temp_str = str(value)
+                if len(temp_str) > max_value_length:
+                    #type_str = str(type(value))
+                    #type_str = type_str[7:-2]
+                    try:
+                        len_value = len(value)
+                    except:
+                        len_value = 1
+                    temp_str = str.format(
+                    'Type::{}, Len: {}', type(value).__name__, len_value)        
 
         value_strings.append(temp_str)
 
@@ -429,15 +456,22 @@ def interpolate_with_threshold(array,
 
     assert(threshold == None or threshold >= 0)
 
+    
+    if make_copy:
+        # Use a new array so we don't modify the original array passed to us
+        new_array = np.copy(array)
+    else:
+        new_array = array
+    
     if(threshold == 0):  # everything gets left as NaN
-        return array
-
+        return new_array
+    
     # Say array = [10, 12, 15, nan, 17, nan, nan, nan, -5]
     # Then np.isnan(array) =
     # [False, False, False, True, False True, True, True, False]
     # Let's obtain the "x-coordinates" of the NaN entries.
     # e.g. [3, 5, 6, 7]
-    x = np.flatnonzero(np.isnan(array))
+    x = np.flatnonzero(np.isnan(new_array))
 
     # (If we weren't using a threshold and just interpolating all NaNs,
     # we could skip the next four lines.)
@@ -462,18 +496,18 @@ def interpolate_with_threshold(array,
         # e.g. if threshold was 5, then x_runs would be [(3,1), (5,3)] so
         #      x would be [3, 5, 6, 7]
         # this give us the x-coordinates of the values to be interpolated:
-        x = np.concatenate([(i[0] + list(range(i[1]))) for i in x_runs])
+        
+        if x_runs:
+            x = np.concatenate([(i[0] + list(range(i[1]))) for i in x_runs])
+        else:
+            #consider th case that there where not valid groups remaining to interpolate 
+            return new_array
+            
 
     # The x-coordinates of the data points, must be increasing.
-    xp = np.flatnonzero(~np.isnan(array))
+    xp = np.flatnonzero(~np.isnan(new_array))
     # The y-coordinates of the data points, same length as xp
-    yp = array[~np.isnan(array)]
-
-    if make_copy:
-        # Use a new array so we don't modify the original array passed to us
-        new_array = np.copy(array)
-    else:
-        new_array = array
+    yp = array[~np.isnan(new_array)]
 
     if extrapolate:
         # TODO
@@ -638,4 +672,165 @@ def get_non_numeric_mask(data):
         print("uh oh")     # DEBUG: remove late
     
 
+def timing_function():
+    # There's a better timing function available in Python 3.3+
+    # Otherwise use the old one.
+    if sys.version_info[0] >= 3 and sys.version_info[1] >= 3:
+        return time.monotonic()
+    else:
+        return time.time()
+
+
+
+def compare_is_equal(x, y, variable_name, tol=1e-6):
+    """
+    This code is meant to implement the functions that actually compare 
+    data between two different instances without knowing anything about
+    what they are comparing (i.e. just looking at the numbers)
+    
+    e.g. this can be used for features comparison.
+        
+    """
+    if np.isnan(x) and np.isnan(y):
+        return True
+    elif np.logical_or(np.isnan(x),np.isnan(y)): 
+        print('Values not equal: %s' % variable_name)
+
+        return False
+    elif np.abs(x - y) <= tol:
+        return True
+    else:
+        print('Values not equal: %s' % variable_name)
+
+        return False
+
+
+def correlation(x, y, variable_name, high_corr_value=0.999, 
+                merge_nans=False):
+    """
+    Compare two numpy arrays using a tolerance threshold
+    
+    Parameters
+    ----------------
+    x: numpy array
+    y: numpy array
+    variable_name: str
+        The name that will be displayed for this variable in error messages
+    high_corr_value: float
+        The threshold below which an error will be thrown.  Default 0.999.
+    merge_nans: bool
+        Default False.
+        
+    Returns
+    ----------------
+    bool
+    
+    NOTE: For now everything is printed; eventually it would be nice
+    to optionally print things.
+    
+    """
+    return_value = False
+
+    if type(x) != type(y):
+        print('Type mismatch %s vs %s: %s' % (type(x), type(y), 
+                                              variable_name))
+    elif x.shape != y.shape:
+        print('Shape mismatch %s vs %s: %s' % (str(x.shape), str(y.shape),
+                                               variable_name))
+    else:
+        np.reshape(x, x.size)
+        np.reshape(y, y.size)
+
+        if merge_nans:
+            keep_mask = ~np.logical_or(np.isnan(x), np.isnan(y))
+            xn = x[keep_mask]
+            yn = y[keep_mask]
+        else:
+            xn = x[~np.isnan(x)]  # xn -> x without NaNs or x no NaN -> xn
+            yn = y[~np.isnan(y)]
+
+        if (xn.size == 0) and (yn.size == 0):
+            return_value = True
+        elif (xn.size == 1) and (yn.size == 1):
+            #Can't take correlation coefficient with single values
+            return_value = True
+        elif xn.shape != yn.shape:
+            print('Shape mismatch after NaN filter: %s' % variable_name)
+        else:
+            c = np.corrcoef(xn, yn)
+            is_good = c[1, 0] > high_corr_value
+            if not is_good:
+                print('Corr value too low for %s: %0.3f' %
+                      (variable_name, c[1, 0]))
+            return_value = is_good
+                
+        return return_value
+
+
+def compare_attributes(obj1, obj2, attribute_list):
+    """
+    Compare all attributes in attribute_list belonging to obj
+    
+    Parameters
+    -------------    
+    obj1, obj2: objects
+        should have the attributes given in attribute_list
+    attribute_list: list of strings
+        a list of the attributes to compare
+    
+    Returns
+    ------------
+    bool
+        True if comparison passed on all attributes.  False otherwise.
+    
+    """
+    is_equal = True
+    for attribute in attribute_list:
+        attrib_equal = correlation(getattr(obj1, attribute), 
+                                   getattr(obj2, attribute), 
+                                   attribute)
+        if not attrib_equal:
+            is_equal = False
+
+    # Return True only if all attributes are correlating
+    return is_equal
+
+            
+        
+class ElementTimer(object):
+
+    """
+    This class is meant to be called in the following way by code that is 
+    processing a feature.
+    
+    timer = utils.ElementTimer
+    timer.tic()
+    # Run the feature processing code, or some other code
+    timer.toc('name of feature being processed')    
+        
+    """
+
+    def __init__(self):    
+        self.names = []
+        self.times = []
+        
+    def tic(self):
+        self.start_time = timing_function()
+    
+    def toc(self,name):
+        self.times.append(timing_function() - self.start_time)
+        self.names.append(name)
+        
+    def __repr__(self):
+        return print_object(self)
+        
+    def summarize(self):
+        """
+        This can be called to display each logged function and how long it
+        took to run
+        """
+        for (name, finish_time) in zip(self.names, self.times):
+            print('%s: %0.3fs' %(name, finish_time))
+
+            
 

@@ -74,10 +74,7 @@ import h5py
 import warnings
 
 from itertools import groupby
-from .. import config
 from .. import utils
-
-from . import feature_comparisons as fc
 
 
 class EventFinder:
@@ -217,16 +214,32 @@ class EventFinder:
         event_mask = np.ones((len(event_data)), dtype=bool)
 
         # If min_speed_threshold has been initialized to something...
-        with warnings.catch_warnings(record=True):
-            if self.min_speed_threshold != None:
+        # We can no longer check if min_speed_threshold is None because 
+        # it's going to go elementwise after Python 3.4
+        if(type(self.min_speed_threshold) == np.ndarray and
+           self.min_speed_threshold.size > 0):
+            # We suppress a *** RuntimeWarning: invalid value encountered
+            # greater_equal
+            # which appears because some of the elements in event_data
+            # and/or what we are comparing it to are NaN.
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
                 if self.include_at_speed_threshold:
                     event_mask = event_data >= self.min_speed_threshold
                 else:
                     event_mask = event_data > self.min_speed_threshold
 
         # If max_speed_threshold has been initialized to something...
-        with warnings.catch_warnings(record=True):
-            if self.max_speed_threshold != None:
+        # We can no longer check if max_speed_threshold is None because 
+        # it's going to go elementwise after Python 3.4
+        if(type(self.max_speed_threshold) == np.ndarray and
+           self.max_speed_threshold.size > 0):
+            # We suppress a *** RuntimeWarning: invalid value encountered
+            # greater_equal
+            # which appears because some of the elements in event_data
+            # and/or what we are comparing it to are NaN.
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=RuntimeWarning)
                 if self.include_at_speed_threshold:
                     event_mask = event_mask & (
                         event_data <= self.max_speed_threshold)
@@ -878,9 +891,15 @@ class EventListWithFeatures(EventList):
         # Distance moved between events
         self.distance_between_events = np.zeros(self.__len__ - 1)
         for i in range(self.__len__ - 1):
-            self.distance_between_events[i] = \
-                np.nansum(
-                    self.distance_per_frame[self.end_frames[i] + 1:self.start_frames[i + 1]])
+            # Suppress "FutureWarning: In Numpy 1.9 the sum along empty 
+            # slices will be zero."
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', category=FutureWarning)
+                self.distance_between_events[i] = \
+                    np.nansum(
+                        self.distance_per_frame[self.end_frames[i] + 1:
+                                                self.start_frames[i+1]])
+
         #self.distance_between_events[-1] = np.NaN
 
         self.total_time = self.num_video_frames / fps
@@ -1040,14 +1059,14 @@ class EventListWithFeatures(EventList):
 
         # TODO: Add an integer equality comparison with name printing
         return \
-            fc.fp_isequal(self.num_video_frames, other.num_video_frames, event_name + '.num_video_frames') and \
-            fc.corr_value_high(self.start_frames, other.start_frames, event_name + '.start_frames') and \
-            fc.corr_value_high(self.end_frames, other.end_frames, event_name + '.end_frames')   and \
-            fc.corr_value_high(self.event_durations, other.event_durations, event_name + '.event_durations')   and \
-            fc.corr_value_high(self.distance_during_events, other.distance_during_events, event_name + '.distance_during_events')   and \
-            fc.fp_isequal(self.total_time, other.total_time, event_name + '.total_time', 0.01) and \
-            fc.fp_isequal(self.frequency, other.frequency, event_name + '.frequency', 0.01) and \
-            fc.fp_isequal(self.time_ratio, other.time_ratio, event_name + '.time_ratio', 0.01) and \
-            fc.fp_isequal(self.data_ratio, other.data_ratio, event_name + '.data_ratio', 0.01) and \
-            fc.fp_isequal(self.num_events_for_stats, other.num_events_for_stats, event_name + '.total_time')
+            utils.compare_is_equal(self.num_video_frames, other.num_video_frames, event_name + '.num_video_frames') and \
+            utils.correlation(self.start_frames, other.start_frames, event_name + '.start_frames') and \
+            utils.correlation(self.end_frames, other.end_frames, event_name + '.end_frames')   and \
+            utils.correlation(self.event_durations, other.event_durations, event_name + '.event_durations')   and \
+            utils.correlation(self.distance_during_events, other.distance_during_events, event_name + '.distance_during_events')   and \
+            utils.compare_is_equal(self.total_time, other.total_time, event_name + '.total_time', 0.01) and \
+            utils.compare_is_equal(self.frequency, other.frequency, event_name + '.frequency', 0.01) and \
+            utils.compare_is_equal(self.time_ratio, other.time_ratio, event_name + '.time_ratio', 0.01) and \
+            utils.compare_is_equal(self.data_ratio, other.data_ratio, event_name + '.data_ratio', 0.01) and \
+            utils.compare_is_equal(self.num_events_for_stats, other.num_events_for_stats, event_name + '.total_time')
            

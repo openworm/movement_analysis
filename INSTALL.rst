@@ -13,7 +13,8 @@ programming language and its NumPy numerical mathematics extension.
 FFMPEG is used for video processing.
 
 **File processing:** The Schafer Lab chose to structure their experiment
-files using the “Heirarchical Data Format, Version 5” `(HDF5)<http://en.wikipedia.org/wiki/Hierarchical_Data_Format#HDF5>`__ format ,
+files using the “Heirarchical Data Format, Version 5” `(HDF5)
+<http://en.wikipedia.org/wiki/Hierarchical_Data_Format#HDF5/>`_ format,
 ending with the extension .MAT. We are using the Python module H5PY to
 extract the information from these files.
 
@@ -32,7 +33,8 @@ files.
 Installing and running the movement\_validation repository
 ----------------------------------------------------------
 
-1.  Install Python 3.x, matplotlib, and Cython.
+1.  Install Python 3.x, matplotlib, and Cython. Some examples may also require other
+    packages as well, in particular scipy and h5py.
 2.  If it's not already included with your Python installation, install
     numpy. Ideally use version 1.8 or greater. Otherwise, if you have
     numpy version less than 1.8, you will need to:

@@ -54,6 +54,7 @@ from .. import utils
 
 from . import events
 
+#%%
 class LocomotionTurns(object):
 
     """
@@ -122,10 +123,14 @@ class LocomotionTurns(object):
 
         # NOTE: For some reason the first and last few angles are NaN, so we use
         # nanmean instead of mean.  We could probably avoid this for the body.
-        angles.head_angles = np.nanmean(bend_angles[first_third, :], axis=0)
-        angles.body_angles = np.nanmean(bend_angles[second_third, :], axis=0)
-        angles.tail_angles = np.nanmean(bend_angles[last_third, :], axis=0)
-        angles.is_stage_movement = is_stage_movement
+        # Suppress RuntimeWarning: Mean of empty slice for those frames 
+        # that are ALL NaN.
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            angles.head_angles = np.nanmean(bend_angles[first_third, :], axis=0)
+            angles.body_angles = np.nanmean(bend_angles[second_third, :], axis=0)
+            angles.tail_angles = np.nanmean(bend_angles[last_third, :], axis=0)
+            angles.is_stage_movement = is_stage_movement
 
         # Deep copy.
         # To @JimHokanson from @MichaelCurrie: what does "ht" stand for?
@@ -140,8 +145,8 @@ class LocomotionTurns(object):
         # value in each angle vector
         if n_head < 2 or n_body < 2 or n_tail < 2:
             # Make omegas and upsilons into blank events lists and return
-            self.omegas   = events.EventListWithFeatures(make_null=True)
-            self.upsilons = events.EventListWithFeatures(make_null=True)
+            self.omegas   = events.EventListWithFeatures(fps, make_null=True)
+            self.upsilons = events.EventListWithFeatures(fps, make_null=True)
             return
 
         # Interpolate the angles.  angles is modified.
@@ -441,7 +446,7 @@ class LocomotionTurns(object):
 ===============================================================================
 """
 
-
+#%%
 class UpsilonTurns(object):
 
     """
@@ -494,7 +499,7 @@ class UpsilonTurns(object):
 ===============================================================================
 """
 
-
+#%%
 class OmegaTurns(object):
 
     """
@@ -568,7 +573,7 @@ class OmegaTurns(object):
         omega_frames_from_th_change = \
             self.h__filterAndSignFrames(body_angles_i, 
                                         omega_frames_from_th_change, 
-                                        options.min_omega_event_length)
+                                        options.min_omega_event_length(fps))
 
         is_omega_frame = (omega_frames_from_angles != 0) | \
                          (omega_frames_from_th_change != 0)
@@ -577,7 +582,7 @@ class OmegaTurns(object):
         signed_omega_frames = \
             self.h__filterAndSignFrames(body_angles_i,
                                         is_omega_frame,
-                                        options.min_omega_event_length)
+                                        options.min_omega_event_length(fps))
 
         # Convert frames to events ...
         self.value = getTurnEventsFromSignedFrames(signed_omega_frames,
@@ -643,18 +648,22 @@ class OmegaTurns(object):
         # Compute tail direction
         #----------------------------------------------------
         head_x, head_y = nw.get_partition('head',
-                                          data_key='skeletons',
+                                          data_key='skeleton',
                                           split_spatial_dimensions=True)
         tail_x, tail_y = nw.get_partition('tail',
-                                          data_key='skeletons',
+                                          data_key='skeleton',
                                           split_spatial_dimensions=True)
 
         # Take the mean across the partition, so that we are left with a single
         # value for each frame (i.e. 1-d an array of length n_frames)
-        head_x = np.nanmean(head_x, axis=0)
-        head_y = np.nanmean(head_y, axis=0)
-        tail_x = np.nanmean(tail_x, axis=0)
-        tail_y = np.nanmean(tail_y, axis=0)
+        # Suppress RuntimeWarning: Mean of empty slice for those frames 
+        # that are ALL NaN.
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=RuntimeWarning)
+            head_x = np.nanmean(head_x, axis=0)
+            head_y = np.nanmean(head_y, axis=0)
+            tail_x = np.nanmean(tail_x, axis=0)
+            tail_y = np.nanmean(tail_y, axis=0)
 
         th_angle = np.arctan2(head_y - tail_y, head_x - tail_x) * (180 / np.pi)
 
@@ -750,9 +759,9 @@ class OmegaTurns(object):
 
 
     def h__filterAndSignFrames(self, body_angles_i, is_omega_frame,
-                               MIN_OMEGA_EVENT_LENGTH):
+                               min_omega_event_length):
         """
-
+        Filter and sign frames.
 
         Notes
         ---------------------------------------    
@@ -771,7 +780,7 @@ class OmegaTurns(object):
         is_omega_frame_as_list = [chr(x)
                                   for x in is_omega_frame_as_ascii_codes]
         is_omega_frame_as_string = ''.join(is_omega_frame_as_list)
-        gap_re = re.compile(r'B{%d,}' % MIN_OMEGA_EVENT_LENGTH)
+        gap_re = re.compile(r'B{%d,}' % min_omega_event_length)
         # Obtain a iterator of the results that match our regex, gap_re.
         re_result = list(gap_re.finditer(is_omega_frame_as_string))
         start1 = [m.start(0) for m in re_result]
@@ -794,10 +803,10 @@ class OmegaTurns(object):
 ===============================================================================
 """
 
-
+#%%
 def getTurnEventsFromSignedFrames(signed_frames, midbody_distance, FPS):
     """
-
+    Get turn events from signed frames
 
     Parameters
     ---------------------------------------    

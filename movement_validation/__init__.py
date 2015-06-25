@@ -14,21 +14,31 @@ License
 https://github.com/openworm/movement_validation/LICENSE.md
 
 """
-from .SchaferExperimentFile import SchaferExperimentFile
-from .NormalizedWorm import NormalizedWorm
+from .normalized_worm import NormalizedWorm
 from .video_info import VideoInfo
 from .features.worm_features import WormFeatures
-from .WormPlotter import WormPlotter
+from .worm_plotter import NormalizedWormPlottable
+from .basic_worm import BasicWorm
 
 from .features.feature_processing_options import FeatureProcessingOptions
 
 from .statistics.histogram_manager import HistogramManager
 from .statistics.manager import StatisticsManager
 
+try:
+    from . import user_config
+except ImportError:
+     raise Exception("user_config.py not found. Copy the "
+                     "user_config_example.txt in the 'movement_validation' "
+                     "package to user_config.py in the same directory and "
+                     "edit the values")
 
-__all__ = ['SchaferExperimentFile',
+
+__all__ = ['BasicWorm',
            'NormalizedWorm',
-		   'VideoInfo',
+		'VideoInfo',
            'WormFeatures',
            'FeatureProcessingOptions',
-           'WormPlotter']
+           'NormalizedWormPlottable',
+           'HistogramManager',
+           'StatisticsManager']
