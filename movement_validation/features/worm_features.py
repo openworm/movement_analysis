@@ -597,11 +597,8 @@ class WormFeatures(object):
 
     """
 
-<<<<<<< HEAD
-    def __init__(self, nw, video_info, processing_options=None, explain=[]):
-=======
-    def __init__(self, nw, processing_options=None):
->>>>>>> 9435613fb3e6514ccef27c237f79fcf1a3ac8deb
+
+    def __init__(self, nw, processing_options=None, explain=[]):
         """
         
         Parameters
@@ -610,14 +607,11 @@ class WormFeatures(object):
         processing_options: movement_validation.features.feature_processing_options
 
         """
-<<<<<<< HEAD
         
         print(explain)
 
         #TODO: Create the normalized worm in here ... 
 
-=======
->>>>>>> 9435613fb3e6514ccef27c237f79fcf1a3ac8deb
         if processing_options is None:
             processing_options = \
                             fpo.FeatureProcessingOptions()
@@ -631,15 +625,9 @@ class WormFeatures(object):
         
         self.morphology = WormMorphology(self)
         self.locomotion = WormLocomotion(self)
-<<<<<<< HEAD
         self.posture = WormPosture(self, 
                                    self.locomotion.velocity.get_midbody_distance())
         self.path = WormPath(self, explain=explain)
-=======
-        self.posture = \
-            WormPosture(self, self.locomotion.velocity.get_midbody_distance())
-        self.path = WormPath(self)
->>>>>>> 9435613fb3e6514ccef27c237f79fcf1a3ac8deb
 
     @classmethod
     def from_disk(cls, file_path):

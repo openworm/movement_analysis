@@ -319,6 +319,7 @@ class Duration(object):
             self.explain();
 
     def explain(self, contour_x, contour_y, mean_cx, mean_cy, x_centroid_cx, y_centroid_cy):
+        pass
 
 
     def __eq__(self, other):
@@ -514,6 +515,7 @@ def worm_path_curvature(features_ref, explain=[]):
 
 
     if 'curvature' in explain:
+        pass
         
 
     return (diff_motion / distance) * (np.pi / 180)

@@ -16,12 +16,13 @@ import sys, os
 # import of movement_validation while running this as 
 # a top-level script (i.e. with __name__ = '__main__')
 sys.path.append('..') 
-import movement_validation
 
-user_config = movement_validation.user_config
-NormalizedWorm = movement_validation.NormalizedWorm
-WormFeatures = movement_validation.WormFeatures
-VideoInfo = movement_validation.VideoInfo
+print(sys.path)
+
+from movement_validation import NormalizedWorm
+
+from movement_validation import user_config, NormalizedWorm
+from movement_validation import WormFeatures, utils
 
 
 def main():
@@ -53,11 +54,11 @@ def main():
     # OPENWORM
     #----------------------
     # Load the normalized worm from file
-    nw = NormalizedWorm(data_file_path)
+    nw = NormalizedWorm.from_schafer_file_factory(data_file_path)
 
     #The frame rate is somewhere in the video info. Ideally this would all come
     #from the video parser eventually
-    vi = VideoInfo('Example Video File',25.8398)
+    #vi = VideoInfo('Example Video File',25.8398)
 
     # Generate the OpenWorm movement validation repo version of the features
 

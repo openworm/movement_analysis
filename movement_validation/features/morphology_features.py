@@ -7,13 +7,10 @@ import numpy as np
 
 from .. import utils
 
-<<<<<<< HEAD
 from . import feature_comparisons as fc
 
 from matplotlib import pyplot as plt
 
-=======
->>>>>>> 9435613fb3e6514ccef27c237f79fcf1a3ac8deb
 class Widths(object):
     """
     Attributes
@@ -25,11 +22,7 @@ class Widths(object):
     
     fields = ('head', 'midbody', 'tail')
     
-<<<<<<< HEAD
     def __init__(self,features_ref, explain=[]):
-=======
-    def __init__(self, features_ref):
->>>>>>> 9435613fb3e6514ccef27c237f79fcf1a3ac8deb
         """
         Parameters
         ----------
@@ -43,7 +36,6 @@ class Widths(object):
         nw = features_ref.nw
     
         for partition in self.fields:
-<<<<<<< HEAD
             setattr(self,partition, np.mean(nw.get_partition(partition, 'widths'),0))
 
         if 'width' in explain:
@@ -63,11 +55,6 @@ class Widths(object):
 
         text2 = ''''''
 
-
-=======
-            widths_in_partition = nw.get_partition(partition, 'widths')
-            setattr(self, partition, np.mean(widths_in_partition, 0))
->>>>>>> 9435613fb3e6514ccef27c237f79fcf1a3ac8deb
     
     @classmethod
     def from_disk(cls,width_ref):
