@@ -25,7 +25,7 @@ class Coordinates(object):
     x :
     y : 
     """
-    def __init__(self,features_ref):
+    def __init__(self,features_ref, explain=[]):
         nw = features_ref.nw
         self.x = nw.contour_x.mean(axis=0)
         self.y = nw.contour_y.mean(axis=0) 
@@ -87,6 +87,7 @@ class Range(object):
 
         #This pulls the source code using the inspect module and then splits into relevant subsections
         #The output is a tuple containing one list which has the lines.
+
         source = inspect.getsourcelines(Range.__init__)[0] 
         definition = source[:2]
         avgperframe = source[2:7]
@@ -316,11 +317,26 @@ class Duration(object):
         self.tail = temp_duration[3]
 
         if 'duration' in explain:
-            self.explain();
+            self.explain(temp_arenas)
 
-    def explain(self, contour_x, contour_y, mean_cx, mean_cy, x_centroid_cx, y_centroid_cy):
-        pass
+    def explain(self, temp_arenas):
+        print 'Arena: ' + str(self.arena)
 
+        print 'Arenas: ' + str(temp_arenas)
+
+        print 'Worm: ' + str(self.worm[291, :])
+
+        print self.worm
+
+        plt.subplot(411)
+        plt.scatter(self.worm.times, self.worm.indices)
+        plt.subplot(412)
+        plt.scatter(self.head.times, self.head.indices)
+        plt.subplot(413)
+        plt.scatter(self.midbody.times, self.midbody.indices)
+        plt.subplot(414)
+        plt.scatter(self.tail.times, self.tail.indices)
+        plt.show()
 
     def __eq__(self, other):
 
@@ -513,11 +529,41 @@ def worm_path_curvature(features_ref, explain=[]):
     with np.errstate(invalid='ignore'):
         distance[distance < 1] = np.NAN
 
-
     if 'curvature' in explain:
-        pass
-        
+        source = inspect.getsourcelines(worm_path_curvature)[0] 
+        setup = ''.join(source[9:16] + source[19:20])
+        speed_and_direction_extraction = ''.join(source[23:26] + source[29:35] + source[37:38])
 
-    return (diff_motion / distance) * (np.pi / 180)
+        print 'First setup is performed. BODY_I is used to slice the worm arrays,\nin order to remove the head and tail which have curvature out of\nscale and phase with the rest of the worm:\n' + setup
+        print 'Then speed and direction are extracted from the worm data: \n' + speed_and_direction_extraction
+
+        print 'Frame scale: ' + str(frame_scale)
+        print 'Half frame scale: ' + str(half_frame_scale)
+
+        plt.subplot(421)
+        plt.plot(x, y)
+        plt.subplot(422)
+        plt.plot(diff_x, diff_y)
+        plt.subplot(423)
+        plt.plot(avg_body_angles_d)
+        plt.subplot(424)
+        plt.plot(speed)
+        plt.subplot(425)
+        plt.plot(motion_direction)
+        plt.subplot(426)
+        plt.plot(diff_motion)
+        plt.subplot(427)
+        plt.plot(distance)
+        plt.show()
+
+
+
+
+
+
+
+
+
+
 
 

@@ -77,7 +77,7 @@ class WormMorphology(object):
 
     """
 
-    def __init__(self, features_ref):
+    def __init__(self, features_ref, explain=[]):
         """
         
         Parameters:
@@ -91,7 +91,7 @@ class WormMorphology(object):
 
         self.length = nw.length
         
-        self.width = morphology_features.Widths(features_ref)
+        self.width = morphology_features.Widths(features_ref, explain=explain)
 
         #TODO: This should eventually be calculated from the contour
         #      and skeleton
@@ -319,7 +319,7 @@ class WormPosture(object):
 
     """
 
-    def __init__(self, features_ref, midbody_distance):
+    def __init__(self, features_ref, midbody_distance, explain=[]):
         """
         Initialization method for WormPosture
 
@@ -514,19 +514,18 @@ class WormPath(object):
         """
         print('Calculating Path Features')
 
-        print(explain)        
-
         nw = features_ref.nw
 
         self.range = path_features.Range(nw.contour_x, nw.contour_y, explain=explain)
 
         # Duration (aka Dwelling)
-        self.duration = path_features.Duration(features_ref)
+        self.duration = path_features.Duration(features_ref, explain=explain)
 
-        self.coordinates = path_features.Coordinates(features_ref)
+        # Coordinates
+        self.coordinates = path_features.Coordinates(features_ref, explain=explain)
 
-        #Curvature
-        self.curvature = path_features.worm_path_curvature(features_ref)
+        # Curvature
+        self.curvature = path_features.worm_path_curvature(features_ref, explain=explain)
 
     # TODO: Move to class in path_features
     @classmethod
@@ -623,10 +622,10 @@ class WormFeatures(object):
         self.nw = nw
         self.timer = utils.ElementTimer()
         
-        self.morphology = WormMorphology(self)
-        self.locomotion = WormLocomotion(self)
+        self.morphology = WormMorphology(self, explain=explain)
+        self.locomotion = WormLocomotion(self, explain=explain)
         self.posture = WormPosture(self, 
-                                   self.locomotion.velocity.get_midbody_distance())
+                                   self.locomotion.velocity.get_midbody_distance(), explain=explain)
         self.path = WormPath(self, explain=explain)
 
     @classmethod

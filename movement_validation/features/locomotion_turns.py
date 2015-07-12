@@ -71,7 +71,7 @@ class LocomotionTurns(object):
 
     """
 
-    def __init__(self, features_ref, bend_angles, is_stage_movement, midbody_distance, sx, sy):
+    def __init__(self, features_ref, bend_angles, is_stage_movement, midbody_distance, sx, sy, explain=[]):
         """
         Initialiser for the LocomotionTurns class
 
@@ -459,7 +459,7 @@ class UpsilonTurns(object):
 
     """
 
-    def __init__(self, upsilon_frames, midbody_distance, fps):
+    def __init__(self, upsilon_frames, midbody_distance, fps, explain=[]):
         """
         Initialiser for the UpsilonTurns class.
 
@@ -518,7 +518,7 @@ class OmegaTurns(object):
     """
 
     def __init__(self, options, omega_frames_from_angles, nw, body_angles,
-                 midbody_distance, fps):
+                 midbody_distance, fps, explain=[]):
         """
         Initialiser for the OmegaTurns class.
 
@@ -804,7 +804,7 @@ class OmegaTurns(object):
 """
 
 #%%
-def getTurnEventsFromSignedFrames(signed_frames, midbody_distance, FPS):
+def getTurnEventsFromSignedFrames(signed_frames, midbody_distance, FPS, explain=[]):
     """
     Get turn events from signed frames
 

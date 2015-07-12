@@ -36,7 +36,7 @@ class LocomotionBend(object):
     Element for LocomotionCrawlingBends
     
     """
-    def __init__(self,amplitude,frequency,name):
+    def __init__(self,amplitude,frequency,name, explain=[]):
         self.amplitude = amplitude
         self.frequency = frequency
         self.name = name
@@ -155,7 +155,7 @@ class LocomotionCrawlingBends(object):
 
     bend_names = ['head', 'midbody', 'tail']
 
-    def __init__(self, features_ref, bend_angles, is_paused, is_segmented_mask):
+    def __init__(self, features_ref, bend_angles, is_paused, is_segmented_mask, explain=[]):
         """
         Compute the temporal bending frequency at the head, midbody, and tail.    
 
@@ -228,7 +228,7 @@ class LocomotionCrawlingBends(object):
         timer.toc('locomotion.crawling_bends')
 
 
-    def h__getBendData(self, avg_bend_angles, bound_info, options, cur_partition, fps):
+    def h__getBendData(self, avg_bend_angles, bound_info, options, cur_partition, fps, explain=[]):
         """
         Compute the bend amplitude and frequency.
 
@@ -475,7 +475,7 @@ class LocomotionForagingBends(object):
 
     """
 
-    def __init__(self, features_ref, is_segmented_mask, ventral_mode):
+    def __init__(self, features_ref, is_segmented_mask, ventral_mode, explain=[]):
         """
         Initialize an instance of LocomotionForagingBends
 
@@ -796,7 +796,7 @@ class CrawlingBendsBoundInfo(object):
     
     
     """
-    def __init__(self,avg_bend_angles,is_paused,options,fps):
+    def __init__(self,avg_bend_angles,is_paused,options,fps, explain=[]):
         
         # TODO: This needs to be cleaned up ...  - @JimHokanson
         min_number_frames_for_bend = round(options.min_time_for_bend*fps)

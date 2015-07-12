@@ -17,8 +17,6 @@ import sys, os
 # a top-level script (i.e. with __name__ = '__main__')
 sys.path.append('..') 
 
-print(sys.path)
-
 from movement_validation import NormalizedWorm
 
 from movement_validation import user_config, NormalizedWorm
@@ -61,8 +59,6 @@ def main():
     #vi = VideoInfo('Example Video File',25.8398)
 
     # Generate the OpenWorm movement validation repo version of the features
-
-    print(explain)
 
     openworm_features = WormFeatures(nw, explain=explain) #need to add flags to functions to enable expaination output
 

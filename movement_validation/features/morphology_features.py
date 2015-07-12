@@ -36,7 +36,7 @@ class Widths(object):
         nw = features_ref.nw
     
         for partition in self.fields:
-            setattr(self,partition, np.mean(nw.get_partition(partition, 'widths'),0))
+            setattr(self, partition, np.mean(nw.get_partition(partition, 'widths'),0))
 
         if 'width' in explain:
             self.explain(nw)
@@ -49,13 +49,10 @@ class Widths(object):
         mid = nw.get_partition('midbody','widths')
         tail = nw.get_partition('tail','widths')
 
+        print head.shape
+        print mid.shape
+        print tail.shape
 
-
-
-
-        text2 = ''''''
-
-    
     @classmethod
     def from_disk(cls,width_ref):
 

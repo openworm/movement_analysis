@@ -35,7 +35,7 @@ class LocomotionVelocityElement(object):
     LocomotionVelocity
     
     """
-    def __init__(self,name,speed,direction):
+    def __init__(self,name,speed,direction, explain=[]):
         self.name = name
         self.speed = speed
         self.direction = direction
@@ -83,7 +83,7 @@ class LocomotionVelocity(object):
     #       this set of partitions does not cover the neck and hips
     attribute_keys = ['head_tip', 'head', 'midbody', 'tail', 'tail_tip']
     
-    def __init__(self, features_ref):
+    def __init__(self, features_ref, explain=[]):
         """
             nw : a NormalizedWorm instance
 
@@ -206,7 +206,7 @@ class MotionEvents(object):
     
     attribute_keys = ['forward','backward','paused']
     
-    def __init__(self,features_ref,midbody_speed,skeleton_lengths):
+    def __init__(self,features_ref,midbody_speed,skeleton_lengths, explain=[]):
         """ 
         Calculate motion codes of the locomotion events
         

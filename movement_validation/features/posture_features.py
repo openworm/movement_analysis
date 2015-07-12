@@ -18,7 +18,7 @@ from .. import config, utils
 from . import events
 
 class Skeleton(object):
-    def __init__(self, features_ref):
+    def __init__(self, features_ref, explain=[]):
         
         nw  = features_ref.nw         
         
@@ -67,7 +67,7 @@ class Bends(object):
     neck : BendSection
     
     """
-    def __init__(self, features_ref):
+    def __init__(self, features_ref, explain=[]):
         nw  = features_ref.nw
 
         p = nw.get_partition_subset('normal')
@@ -144,7 +144,7 @@ class BendSection(object):
     Bends
     
     """
-    def __init__(self, mean, std_dev, name):
+    def __init__(self, mean, std_dev, name, explain=[]):
         self.mean = mean
         self.std_dev = std_dev
         self.name = name
@@ -181,7 +181,7 @@ class BendSection(object):
                                   'posture.bends.' + self.name + '.std_dev')
 
 
-def get_eccentricity_and_orientation(features_ref):
+def get_eccentricity_and_orientation(features_ref, explain=[]):
     """
      Get the eccentricity and orientation of a contour using the moments
 
@@ -304,7 +304,7 @@ class AmplitudeAndWavelength(object):
     secondary_wavelength
     track_length
     """
-    def __init__(self,theta_d, features_ref):
+    def __init__(self,theta_d, features_ref, explain=[]):
 
         """
         Calculates amplitude of rotated worm (relies on orientation
