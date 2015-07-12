@@ -1,18 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-This should replicate the behaviour of the compute "new" histograms code from
-https://github.com/JimHokanson/SegwormMatlabClasses/
-blob/master/%2Bseg_worm/%2Btesting/%2Bstats/t001_oldVsNewStats.m
-
-We are just trying to achieve the creation of an in-memory object that contains
-the statistics generated from comparing a set of 20 Feature .mat Files:
+Create an in-memory object, statistics_manager, that contains the 
+statistics generated from comparing a set of 20 Feature .mat Files:
 - 10 "Experiment" files and
 - 10 "Control" files.
 
+Notes
+--------------
+Formerly:
+https://github.com/JimHokanson/SegwormMatlabClasses/
+blob/master/%2Bseg_worm/%2Btesting/%2Bstats/t001_oldVsNewStats.m
+
 """
 import sys, os, pickle
+import matplotlib.pyplot as plt
 
-# We must add .. to the path so that we can perform the 
+# We must add .. to the path so that we can perform the
 # import of movement_validation while running this as 
 # a top-level script (i.e. with __name__ = '__main__')
 sys.path.append('..')
@@ -23,28 +26,49 @@ def main():
     base_path = os.path.abspath(mv.user_config.EXAMPLE_DATA_PATH)
     root_path = os.path.join(base_path, '30m_wait')
 
-    experiment_histograms, control_histograms = \
+    exp_histogram_manager, ctl_histogram_manager = \
         obtain_histograms(root_path, "pickled_histograms.dat")
 
+    print("Done with Histogram generation.  Now let's calculate statistics.")
 
-    #for i in range(0, 700, 100):
-    for i in range(1):
-        experiment_histograms.hists[i].plot_versus(control_histograms.hists[i])     
+    statistics_manager = \
+        mv.StatisticsManager(exp_histogram_manager, ctl_histogram_manager)
 
-    print('Done with stats generation')
+    print("Comparison p and q values are %.2f and %.2f, respectively." %
+          (statistics_manager.min_p_wilcoxon, 
+           statistics_manager.min_q_wilcoxon))
 
-    # TODO: test this:
-    #stats = mv.StatisticsManager(experiment_histograms, control_histograms)
-
-    # TODO:
-    # now somehow display the stats to prove that we generated them!
-
+    statistics_manager.plot()
+    plt.savefig('michael.png')
+    
+    """
+    # Plot the p-values, ranked.
+    # TODO: add a line at the 0.01 and 0.05 thresholds, with annotation for
+    #       the intercept.
+    plt.plot(np.sort(statistics_manager.p_wilcoxon_array), 
+             label="Sorted p-values by Wilcoxon's signed rank test")
+    plt.plot(np.sort(statistics_manager.q_wilcoxon_array),
+             label="Sorted q-values by Wilcoxon's signed rank test")
+    plt.ylabel("Probability", fontsize=10)
+    plt.xlabel("Feature", fontsize=10)
+    plt.legend(loc='best', shadow=True)
+    #plt.gca().set_axis_bgcolor('m')
+    plt.show()
+    """    
+    
     # TODO:
     # maybe compare to the segwormmatlabclasses-generated stats somehow?
 
     # TODO:
     # visualize the data in a grid
     # http://stackoverflow.com/questions/19407950
+
+    # Y-axis is features, labeled
+    # X-axis is worm videos
+    # then list the p and q values
+    # List if the mean is vailable or golor red if not.
+
+
 
 def get_matlab_filepaths(root_path):
     """
@@ -85,7 +109,8 @@ def obtain_histograms(root_path, pickle_file_path):
     
     Returns
     -------
-    Two items: experiment_histograms and control_histograms    
+    exp_histogram_manager, ctl_histogram_manager
+        Both instances of HistogramManager
     
     """
     if os.path.isfile(pickle_file_path):
@@ -93,8 +118,8 @@ def obtain_histograms(root_path, pickle_file_path):
               "at:\n%s\n" % pickle_file_path + "Let's attempt to "
               "unpickle rather than re-calculate, to save time...")
         with open(pickle_file_path, "rb") as pickle_file:
-            experiment_histograms = pickle.load(pickle_file)
-            control_histograms = pickle.load(pickle_file)
+            exp_histogram_manager = pickle.load(pickle_file)
+            ctl_histogram_manager = pickle.load(pickle_file)
     else:
         print("Could not find a pickled version of the histogram "
               "managers so let's calculate from scratch and then pickle")
@@ -110,19 +135,19 @@ def obtain_histograms(root_path, pickle_file_path):
         assert(len(control_files) >= 10)
 
         # Compute histograms on our files
-        experiment_histograms = mv.HistogramManager(experiment_files)
-        control_histograms = mv.HistogramManager(control_files)
+        exp_histogram_manager = mv.HistogramManager(experiment_files[:10])
+        ctl_histogram_manager = mv.HistogramManager(control_files[:10])
         
         # Store a pickle file in the same folder as this script 
         # (i.e. movement_validation/examples/)
         with open(pickle_file_path, "wb") as pickle_file:
-            pickle.dump(experiment_histograms, pickle_file)
-            pickle.dump(control_histograms, pickle_file)
+            pickle.dump(exp_histogram_manager, pickle_file)
+            pickle.dump(ctl_histogram_manager, pickle_file)
 
     print("Experiment has a total of " + \
-          str(len(experiment_histograms.hists)) + " histograms")
+          str(len(exp_histogram_manager.merged_histograms)) + " histograms")
 
-    return experiment_histograms, control_histograms
+    return exp_histogram_manager, ctl_histogram_manager
 
 
 if __name__ == '__main__':

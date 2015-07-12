@@ -4,7 +4,7 @@ An example showing how to use the movement_validation package to go from a
 raw video .avi file to a fitness function result.
 
 """
-import sys, os, warnings
+import sys, os
 
 # We must add .. to the path so that we can perform the 
 # import of movement_validation while running this as 
@@ -12,7 +12,7 @@ import sys, os, warnings
 sys.path.append('..') 
 import movement_validation as mv
 
-
+#%%
 def main():
     # TODO:
     #h_ventral_contour, h_dorsal_contour, video_info = \
@@ -44,11 +44,27 @@ def main():
     experiment_histograms = mv.HistogramManager(experiment_files)
     control_histograms = mv.HistogramManager(control_files)
 
-    # TODO: show all histograms on a tabular format on an HTML page.
-    for i in range(1):
-        experiment_histograms.hists[i].plot_versus(control_histograms.hists[i])     
+    # Plot some histograms
+    """
+    fig = plt.figure(1)
+    rows = 5; cols = 4
+    #for i in range(0, 700, 100):
+    for i in range(rows * cols):
+        ax = plt.subplot2grid((rows, cols), (i // cols, i % cols))
+        mv.Histogram.plot_versus(ax,
+                                 experiment_histograms.hists[i],
+                                 control_histograms.hists[i])
+    #plt.tight_layout()
+    """                                 
+    stat = mv.StatisticsManager(experiment_histograms, control_histograms)
 
+    print("Comparison p and q values are %.2f and %.2f, respectively." %
+    #     (stat.p_worm, stat.q_worm))
+          (stat.p_worm, 0))
     
+
+
+#%%
 def get_matlab_filepaths(root_path):
     """
     Recursively traverses from root_path to find all .mat files
@@ -68,64 +84,15 @@ def get_matlab_filepaths(root_path):
 
     return matlab_filepaths
 
+#%%
 def geppetto_to_features(minimal_worm_spec_path):
     pass
 
 
-def video_to_features(video_path, output_path):
-    """
-    Go from a path to a .avi file to features
-
-    Parameters
-    --------------------
-    vid_path: string
-        Path to the video file.
-    output_path: string
-        Path to save the feature file to.  Will overwrite if necessary.
-    
-    Returns
-    --------------------
-    A StatisticsManager instance
-    
-    """
-    
-
-    # The segmentation algorithm requires a temporary folder to generate 
-    # some intermediate files.  The folder will be deleted at the end.
-    tmp_root = os.path.join(os.path.abspath(output_path), 'TEMP_DATA')
-
-    video = mv.VideoFile(video_path, tmp_root)
-    frame_iterator = video.obtain_frame_iterator()
-
-    worm_frame_list = []
-
-    for frame in frame_iterator:
-        bool_frame = frame.process()
-        segmented_worm_frame = mv.SegmentedWorm(bool_frame)
-        worm_frame_list.append(segmented_worm_frame)
-    
-    worm_spec = mv.MinimalWormSpecification(worm_frame_list)
-    
-    worm_pre_features = mv.WormPreFeatures(worm_spec)
-    
-    nw = mv.NormalizedWorm(worm_spec.pre_features)
-    
-    if hasattr(video, 'video_info'):
-        worm_features = mv.WormFeatures(nw, video.video_info)
-    else:
-        warnings.warn("VideoFile has not yet implemented video_info, " + \
-                      "using default values.")
-        #The frame rate is somewhere in the video info. Ideally this would all come
-        #from the video parser eventually
-        vi = mv.VideoInfo('Example Video File', 25.8398)
-        worm_features = mv.WormFeatures(nw, vi)
-    
-    worm_features.write_to_disk(output_path)
-
-
+#%%
 if __name__ == '__main__':
-    start = mv.utils.timing_function()
+    start_time = mv.utils.timing_function()
     main()
     print("Time elapsed: %.2fs" % 
-          (utils.timing_function() - start_time))
+          (mv.utils.timing_function() - start_time))
         

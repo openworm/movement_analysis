@@ -12,10 +12,11 @@ import warnings
 import os
 import matplotlib.pyplot as plt
 
-from . import utils
+from .. import config, utils
 from .basic_worm import WormPartition
 from .basic_worm import BasicWorm
 from .pre_features import WormParsing
+from .pre_features_helpers import WormParserHelpers
 from .video_info import VideoInfo
 
 
@@ -86,63 +87,52 @@ class NormalizedWorm(WormPartition):
         nw = cls()
         bw = basic_worm
         nw.video_info = bw.video_info
-        timer = utils.ElementTimer()
         
         if bw.h_ventral_contour is not None:
             # 1. Derive skeleton and widths from contour
-            timer.tic()
             nw.widths, h_skeleton = \
                 WormParsing.compute_skeleton_and_widths(bw.h_ventral_contour, 
                                                         bw.h_dorsal_contour,
                                                         frames_to_plot_widths)
-            timer.toc("compute_skeleton_and_widths")
 
             # 2. Calculate the angles along the skeleton for each frame
-            timer.tic()
             nw.angles = WormParsing.compute_angles(h_skeleton)
-            timer.toc("angles")
 
             # 3. Normalize the skeleton, widths and contour to 49 points
             #    per frame
-            timer.tic()
-            nw.skeleton = WormParsing.normalize_all_frames_xy(h_skeleton)
-            timer.toc("normalize_all_frames_xy(h_skeleton)")
+            nw.skeleton = WormParserHelpers.\
+                normalize_all_frames_xy(h_skeleton, 
+                                        config.N_POINTS_NORMALIZED)
 
-            timer.tic()
-            nw.widths = WormParsing.normalize_all_frames(nw.widths, h_skeleton)
-            timer.toc("normalize_all_frames(nw.widths, h_skeleton)")
+            nw.widths = WormParserHelpers.\
+                normalize_all_frames(nw.widths, h_skeleton,
+                                     config.N_POINTS_NORMALIZED)
 
-            timer.tic()
-            nw.ventral_contour = WormParsing.normalize_all_frames_xy(
-                                            bw.h_ventral_contour)
-            timer.toc("normalize_all_frames_xy(bw.ventral_contour)")
+            nw.ventral_contour = WormParserHelpers.\
+                normalize_all_frames_xy(bw.h_ventral_contour,
+                                        config.N_POINTS_NORMALIZED)
 
-            timer.tic()
-            nw.dorsal_contour = WormParsing.normalize_all_frames_xy(
-                                            bw.h_dorsal_contour)            
-            timer.toc("normalize_all_frames_xy(bw.dorsal_contour)")
+            nw.dorsal_contour = WormParserHelpers.\
+                normalize_all_frames_xy(bw.h_dorsal_contour,
+                                        config.N_POINTS_NORMALIZED)
 
             # 4. Calculate area for each frame
-            timer.tic()
             nw.area = WormParsing.compute_area(nw.contour)
-            timer.toc("compute_area")
 
         else:
             # With no contour, let's assume we have a skeleton.
             # Measurements that cannot be calculated (e.g. areas) are simply
             # marked None.
             nw.angles = WormParsing.compute_angles(bw.skeleton)
-            nw.skeleton = WormParsing.normalize_all_frames_xy(bw.skeleton)
+            nw.skeleton = WormParserHelpers.\
+                normalize_all_frames_xy(bw.h_skeleton,
+                                        config.N_POINTS_NORMALIZED)
             nw.ventral_contour = None
             nw.dorsal_contour = None
             nw.area = None
         
         # 6. Calculate length
-        timer.tic()
         nw.length = WormParsing.compute_skeleton_length(nw.skeleton)
-        timer.toc("length")
-        
-        timer.summarize()        
         
         return nw
 
@@ -421,7 +411,7 @@ class NormalizedWorm(WormPartition):
             s = self.skeleton
             
             if s.size != 0:
-                s_mean = np.ones(np.shape(s)) * self.centre
+                s_mean = np.ones(s.shape) * self.centre
                 self._centred_skeleton = s - s_mean
             else:
                 self._centred_skeleton = s
@@ -453,7 +443,7 @@ class NormalizedWorm(WormPartition):
           2 x 2 x 49 x n, times 2 x 49 x n
         #s1 = np.rollaxis(self.skeleton, 1)
 
-        #rot_matrix = np.ones(np.shape(s1)) * rot_matrix
+        #rot_matrix = np.ones(s1.shape) * rot_matrix
 
         #self.skeleton_rotated = rot_matrix.dot(self.skeleton)
 
@@ -476,8 +466,8 @@ class NormalizedWorm(WormPartition):
             # rot_matrix[:,:,0].dot(s1[:,0,0])
     
             # ATTEMPTING TO CHANGE rot_matrix from 2x2x49xn to 2x49xn
-            # rot_matrix2 = np.ones((2, 2, np.shape(s1)[1], 
-            #                        np.shape(s1)[2])) * rot_matrix
+            # rot_matrix2 = np.ones((2, 2, s1.shape[1], 
+            #                        s1.shape[2])) * rot_matrix
     
             s1_rotated = []
     
@@ -532,7 +522,7 @@ class NormalizedWorm(WormPartition):
 
         """
         d = getattr(self, measurement)
-        if(len(np.shape(d)) < 3):
+        if(len(d.shape) < 3):
             raise Exception("Position Limits Is Only Implemented for 2D data")
         return (np.nanmin(d[:, dimension, :]), 
                 np.nanmax(d[:, dimension, :]))
@@ -608,9 +598,11 @@ class NormalizedWorm(WormPartition):
         """
         Compare this Normalized worm against another.
 
-        # Idea from @JimHokanson:
-        # TODO: Do this on a frame by frame basis, do some sort of distance 
-        # computation rather than all together. This might hide bad frames        
+        TODO: Idea from @JimHokanson:
+        Do this on a frame by frame basis, do some sort of distance 
+        computation rather than all together. This might hide bad frames        
+        i.e. besides using correlation for comparison, a normalized distance 
+        comparison that could catch extreme outliers would also be useful        
         
         """
         attribute_list = ['skeleton_x', 'skeleton_y',
@@ -618,7 +610,9 @@ class NormalizedWorm(WormPartition):
                           'dorsal_contour_x', 'dorsal_contour_y',
                           'angles', 'widths', 'length', 'area']
 
-        return utils.compare_attributes(self, other, attribute_list)
+        return utils.compare_attributes(self, other, attribute_list,
+                                        high_corr_value=0.94,
+                                        merge_nans_list=['angles'])
 
 
     def __repr__(self):

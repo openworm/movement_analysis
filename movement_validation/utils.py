@@ -7,12 +7,14 @@ that are the equivalent of the same-named functions in Matlab, e.g. gausswin
 
 """
 from __future__ import division
-
 from itertools import groupby
-import csv
-import matplotlib.pyplot as plt
+
+import sys, time, csv
+
 import numpy as np
-import sys, time
+import scipy as sp
+
+import matplotlib.pyplot as plt
 
 
 __ALL__ = ['scatter',
@@ -53,20 +55,35 @@ def imagesc(data):
     plt.imshow(data, aspect='auto')
     plt.show()
 
-def find(data,n=None):
+def find(data, num_indices_to_return=None):
+    """
+    Find the indices of the first n entries of data that evaluate to True
+
+    Parameters
+    ------------
+    data: numpy array
+    num_indices_to_return: int (optional)
+        the number of indices to return
+    
+    Returns
+    ------------
+    numpy array of integers
+        The indices of the first n entries of data that evaluate to True
+
+    Notes
+    ------------
+    Similar to Matlab's find() function
 
     """
-    Similar to Matlab's find() function
-    TODO: Finish documentation
-    """
-    temp = np.flatnonzero(data)
-    if n is not None:
-        if n >= temp.size:
-            return temp
+    all_indices = np.flatnonzero(data)
+    
+    if num_indices_to_return is not None:
+        if num_indices_to_return >= all_indices.size:
+            return all_indices
         else:
-            return temp[0:n]
+            return all_indices[0:num_indices_to_return]
     else:
-        return temp
+        return all_indices
 
 def separated_peaks(x, dist, use_max, value_cutoff):
     """
@@ -767,28 +784,37 @@ def correlation(x, y, variable_name, high_corr_value=0.999,
         return return_value
 
 
-def compare_attributes(obj1, obj2, attribute_list):
+def compare_attributes(obj1, obj2, attribute_list, high_corr_value=0.999, 
+                       merge_nans_list=None):
     """
     Compare all attributes in attribute_list belonging to obj
     
     Parameters
     -------------    
     obj1, obj2: objects
-        should have the attributes given in attribute_list
+        Should have the attributes given in attribute_list
     attribute_list: list of strings
-        a list of the attributes to compare
-    
+        A list of the attributes to compare
+    high_corr_value: float
+        The threshold below which an error will be thrown.  Default 0.999.
+    merge_nans_list: list of strings
+        Attributes to merge_nans for.  Default None.
+   
     Returns
     ------------
     bool
         True if comparison passed on all attributes.  False otherwise.
     
     """
+    if merge_nans_list is None:
+        merge_nans_list = []
+        
     is_equal = True
     for attribute in attribute_list:
+        merge_nans = attribute in merge_nans_list
         attrib_equal = correlation(getattr(obj1, attribute), 
                                    getattr(obj2, attribute), 
-                                   attribute)
+                                   attribute, high_corr_value, merge_nans)
         if not attrib_equal:
             is_equal = False
 
@@ -832,5 +858,214 @@ class ElementTimer(object):
         for (name, finish_time) in zip(self.names, self.times):
             print('%s: %0.3fs' %(name, finish_time))
 
-            
 
+
+def round_to_odd(num):
+    """
+    Round a number to the nearest odd number.
+    
+    The only ambiguous case is that of a whole even number, since it's    
+    equally close to its higher and lower neighbour.
+    In this case, go with the higher (rightmost) one on the number line. 
+    (NOT the highest in absolute value)
+    
+    e.g. round_to_odd(4) returns 5
+         round_to_odd(2) returns 3
+         round_to_odd(-2) returns -1
+         round_to_odd(1.5) returns 1
+         round_to_odd(0.5) returns 1
+    
+    Parameters
+    -------------
+    num: float
+        The number to be rounded
+        
+    Returns
+    -------------
+    An integer
+        The nearest odd number to num
+        
+    """
+    num = np.floor(num)
+    if num % 2 == 0:
+        num = num + 1
+        
+    return num
+
+    
+    
+def compute_normal_vectors(curve, clockwise_orientation=True):
+    """
+    Compute normal vectors for a given curve in two dimensions.
+    (i.e. Obtain vectors of direction 1 perpendicular to the gradient) 
+    
+    Parameters
+    ---------------
+    curve: numpy array of shape (2,k)
+        This is for a given curve, where k is the number of points 
+        on the curve.
+    clockwise_orientation: bool
+        Whether to rotate the gradient vectors clockwise 90 degrees or 
+        counter-clockwise 90 degrees.
+
+    Returns
+    ---------------
+    numpy array of shape (k,), numpy array of shape (k,)
+        x-coordinate of normal vector, y-coordinate of normal vector
+    
+    """
+    dx = np.gradient(curve[0,:])
+    dy = np.gradient(curve[1,:])
+    
+    # Take the perpendicular of each of these gradient vectors by applying
+    # a 90 degree rotation.
+    # curve_gradient should have shape (2,k)
+    if clockwise_orientation:
+        # (This should give us -1 for the projection)
+        curve_gradient = [dy, -dx]
+    else:
+        # (This should give us 1 for the projection)
+        curve_gradient = [-dy, dx]        
+
+    # Find the magnitude of the gradient (shape (k,))
+    curve_gradient_magnitude = np.linalg.norm(curve_gradient, axis=0)
+    
+    # Scale each coordinate down so that we have a vector of length 1
+    # This numpy array should have shape (2,k)
+    normal_vector = curve_gradient / curve_gradient_magnitude
+
+    # Split up our return value into x and y coordinates        
+    return normal_vector[0,:], normal_vector[1,:]
+    
+
+def compute_q_values(pvalues,
+                     vlambda=None, pi0_method="smoother", 
+                     robust=False, smooth_df=3,
+                     smooth_log_pi0=False, pi0=None):
+    """
+    Compute false discovery rate (qvalues) qvalues after the method by 
+    Storey et al. (2002).  
+    Paper link: http://www.genomine.org/papers/directfdr.pdf
+
+    The Python code derives from the R implementation at 
+    http://genomics.princeton.edu/storeylab/qvalue/linux.html.
+    
+    Code from http://genomic-association-tester.googlecode.com/hg-history/
+    991fdb4e3208324c39d57a1eca20b3a8f83602fd/gat/Stats.py
+    
+    Comments from Matlab equivalent function, mafdr:
+
+    Original Matlab code: _, q_t_all = mafdr(p_t)
+    http://www.mathworks.com/help/bioinfo/ref/mafdr.html
+    FDR = mafdr(PValues) estimates a positive FDR (pFDR) value for each 
+    value in PValues, a column vector or DataMatrix object containing 
+    p-values for each feature (for example, gene) in a data set, using 
+    the procedure introduced by Storey, 2002. FDR is a column vector or
+    a DataMatrix object containing positive FDR (pFDR) values.
+    [FDR, Q] = mafdr(PValues) also returns a q-value for each p-value 
+    in PValues, using the procedure introduced by Storey, 2002. Q is a 
+    column vector containing measures of hypothesis testing error for 
+    each observation in PValues.
+    
+    """
+
+    if min(pvalues) < 0 or max(pvalues) > 1:
+        raise ValueError( "p-values out of range" )
+
+    m = len(pvalues)
+    pvalues = np.array( pvalues, dtype = np.float )
+
+    if vlambda == None: vlambda = np.arange(0,0.95,0.05)
+
+    if pi0 is None:
+        if type(vlambda) == float:
+            vlambda = (vlambda,)
+
+        if len(vlambda) > 1 and len(vlambda) < 4:
+            raise ValueError(" if length of vlambda greater than 1, you "
+                             "need at least 4 values." )
+
+        if len(vlambda) > 1 and (min(vlambda) < 0 or max(vlambda) >= 1):
+            raise ValueError( "vlambda must be within [0, 1).")
+
+        # estimate pi0
+        if len(vlambda) == 1: 
+            vlambda = vlambda[0]
+            if  vlambda < 0 or vlambda >=1 :
+                raise ValueError( "vlambda must be within [0, 1).")
+
+            pi0 = (np.mean([x >= vlambda for x in pvalues])
+                   / (1.0 - vlambda))
+            pi0 = min(pi0, 1.0)
+        else:
+
+            pi0 = np.zeros(len(vlambda), np.float)
+
+            for i in range(len(vlambda)):
+                pi0[i] = (np.mean([x >= vlambda[i] for x in pvalues])
+                          / (1.0 - vlambda[i]))
+
+            if pi0_method == "smoother":
+                if smooth_log_pi0:
+                    pi0 = np.log(pi0)
+                tck = sp.interpolate.splrep(vlambda, pi0, k = smooth_df,
+                                               s = 10000)
+                pi0 = sp.interpolate.splev(max(vlambda), tck)
+
+                if smooth_log_pi0:
+                    pi0 = np.exp(pi0)
+                
+            elif pi0_method == "bootstrap":
+                minpi0 = min(pi0)
+
+                mse = np.zeros( len(vlambda), np.float )
+                pi0_boot = np.zeros( len(vlambda), np.float )
+
+                for i in range(100):
+                    # sample pvalues
+                    idx_boot = np.random.random_integers( 0, m-1, m) 
+                    pvalues_boot = pvalues[idx_boot]
+
+                    for x in range(len(vlambda)):
+                        # compute number of pvalues larger than lambda[x]
+                        pi0_boot[x] = (np.mean(pvalues_boot > vlambda[x]) / 
+                                       (1.0 - vlambda[x]))
+                    mse += (pi0_boot - minpi0) ** 2
+                pi0 = min( pi0[mse==min(mse)] )
+            else:
+                raise ValueError("'pi0_method' must be one of 'smoother' or "
+                                 "'bootstrap'.")
+
+            pi0 = min(pi0,1.0)
+    
+    if pi0 <= 0:
+        raise ValueError("The estimated pi0 <= 0 (%f). Check that you have "
+                         "valid p-values or use another vlambda method." % pi0)
+
+    # Compute qvalues
+    #--------------------------------------
+    idx = np.argsort(pvalues)
+    # Monotonically decreasing bins, so that bins[i-1] > x >=  bins[i]
+    bins = np.unique(pvalues)[::-1]
+
+    # v[i] = number of observations less than or equal to pvalue[i]
+    # Could this be done more elegantly?
+    val2bin = len(bins) - np.digitize(pvalues, bins)
+    v = np.zeros( m, dtype = np.int )
+    lastbin = None
+    for x in range(m-1, -1, -1):
+        bin = val2bin[idx[x]]
+        if bin != lastbin: c = x
+        v[idx[x]] = c+1
+        lastbin = bin
+
+    qvalues = pvalues * pi0 * m / v
+    if robust:
+        qvalues /= (1.0 - (1.0 - pvalues)**m)
+
+    # Bound qvalues by 1 and make them monotonic
+    qvalues[idx[m-1]] = min(qvalues[idx[m-1]], 1.0)
+    for i in range(m-2,-1,-1):
+        qvalues[idx[i]] = min(min(qvalues[idx[i]], qvalues[idx[i+1]]), 1.0)
+
+    return qvalues

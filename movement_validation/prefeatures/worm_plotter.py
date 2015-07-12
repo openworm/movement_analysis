@@ -36,8 +36,6 @@ from matplotlib.patches import Ellipse
 from matplotlib.widgets import Button, Slider
 import matplotlib.animation as animation
 
-from . import config
-
 
 class NormalizedWormPlottable(animation.TimedAnimation):
     """
@@ -253,7 +251,7 @@ class NormalizedWormPlottable(animation.TimedAnimation):
 
         # TimedAnimation draws a new frame every *interval* milliseconds.
         # so this is how we convert from FPS to interval:
-        interval = 1000 / config.FPS
+        interval = 1000 / self.nw.video_info.fps
 
         return animation.TimedAnimation.__init__(self,
                                                  fig,
@@ -422,13 +420,14 @@ class NormalizedWormPlottable(animation.TimedAnimation):
         http://matplotlib.sourceforge.net/api/animation_api.html
 
         """
+        fps = self.nw.video_info.fps
         FFMpegWriter = animation.writers['ffmpeg']
         metadata = dict(title=file_title,
                         artist='matplotlib',
                         comment=file_comment)
-        writer = FFMpegWriter(fps=15, metadata=metadata)
+        writer = FFMpegWriter(fps=fps, metadata=metadata)
         animation.TimedAnimation.save(self, filename,
-                                      writer=writer, fps=config.FPS,
+                                      writer=writer, fps=fps,
                                       extra_args=['-vcodec', 'libx264'])
 
 

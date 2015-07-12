@@ -14,16 +14,21 @@ License
 https://github.com/openworm/movement_validation/LICENSE.md
 
 """
-from .normalized_worm import NormalizedWorm
-from .video_info import VideoInfo
-from .features.worm_features import WormFeatures
-from .worm_plotter import NormalizedWormPlottable
-from .basic_worm import BasicWorm
+from .prefeatures.video_info import VideoInfo
+from .prefeatures.basic_worm import BasicWorm
+from .prefeatures.normalized_worm import NormalizedWorm
+from .prefeatures.worm_plotter import NormalizedWormPlottable
 
+# This is temporary; we will eventually remove it when the code is ready
+# to become WormFeatures
+from .features.worm_features import WormFeaturesDos
+
+from .features.worm_features import WormFeatures
 from .features.feature_processing_options import FeatureProcessingOptions
 
 from .statistics.histogram_manager import HistogramManager
-from .statistics.manager import StatisticsManager
+from .statistics.statistics_manager import StatisticsManager
+from .statistics.histogram import Histogram, MergedHistogram
 
 try:
     from . import user_config
@@ -41,4 +46,6 @@ __all__ = ['BasicWorm',
            'FeatureProcessingOptions',
            'NormalizedWormPlottable',
            'HistogramManager',
-           'StatisticsManager']
+           'StatisticsManager',
+           'Histogram',
+           'MergedHistogram']

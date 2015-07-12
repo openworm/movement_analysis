@@ -23,9 +23,11 @@ SegwormMatlabClasses/+seg_worm/@feature_calculator/features.m
 
 """
 
+import csv, os, warnings
 import h5py  # For loading from disk
 import numpy as np
 import collections  # For namedtuple
+import pandas as pd
 
 from .. import utils
 
@@ -93,21 +95,7 @@ class WormMorphology(object):
         
         self.width = morphology_features.Widths(features_ref, explain=explain)
 
-        #TODO: This should eventually be calculated from the contour
-        #      and skeleton
-        #
-        # This work is currently ongoing in the constructor for NormalizedWorm
-        #
-        # Eventually those methods will probably move to here ...
-        if hasattr(nw, 'area'):
-            self.area = nw.area
-        else:
-            hasattr(self, 'area')
-            print(self)
-            self.area = nw.tail_area + \
-                nw.head_area + \
-                nw.vulva_area + \
-                nw.non_vulva_area
+        self.area = nw.area
 
         self.area_per_length = self.area / self.length
         self.width_per_length = self.width.midbody / self.length
@@ -355,6 +343,46 @@ class WormPosture(object):
         self.skeleton = posture_features.Skeleton(features_ref)
 
         self.eigen_projection = posture_features.get_eigenworms(features_ref)
+
+
+    """
+    We need these six @property methods because otherwise eigen_projections
+    are the only first-class sub-extended features that are not fully 
+    addressable by nested object references.  Without these, I'd have to say:
+
+    worm_features_object.posture.eigen_projection[0]
+
+    Instead I can say:
+    
+    worm_features_object.posture.eigen_projection0
+    
+    ...which is crucial for the object-data mapping, for example when 
+    pulling a pandas DataFrame via WormFeatures.getDataFrame.
+    """    
+    @property
+    def eigen_projection0(self):
+        return self.eigen_projection[0]
+
+    @property
+    def eigen_projection1(self):
+        return self.eigen_projection[1]
+
+    @property
+    def eigen_projection2(self):
+        return self.eigen_projection[2]
+
+    @property
+    def eigen_projection3(self):
+        return self.eigen_projection[3]
+
+    @property
+    def eigen_projection4(self):
+        return self.eigen_projection[4]
+
+    @property
+    def eigen_projection5(self):
+        return self.eigen_projection[5]
+
 
     @classmethod
     def from_disk(cls, p_var):
@@ -648,6 +676,49 @@ class WormFeatures(object):
 
         return self
 
+    def get_DataFrame(self):
+        """
+        Returns
+        ------------
+        A pandas.DataFrame object
+            Contains all the feature data in one table
+            
+        """
+        # Use pandas to load the features specification
+        feature_spec_path = os.path.join('..', 'documentation', 'database schema', 'Features Specifications.xlsx')
+
+        # Let's ignore a PendingDeprecationWarning here since my release of 
+        # pandas seems to be using tree.getiterator() instead of tree.iter()
+        # It's probably fixed in the latest pandas release already
+        # Here's an exmaple of the issue in a different repo, along with the 
+        # fix.  https://github.com/python-excel/xlrd/issues/104
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            excel_file = pd.ExcelFile(feature_spec_path)
+        
+
+        feature_spec = excel_file.parse('FeatureSpecifications')
+
+        feature_dataframe = pd.DataFrame(columns=['sub-extended feature ID', 
+                                                  'data_array'])
+        
+        for index, row in feature_spec.iterrows():
+            sub_extended_feature_ID = row['sub-extended feature ID']
+            nested_attributes = row['feature_field'].split('.')
+                
+           
+            attribute = self
+            for attribute_name in nested_attributes:
+                try:
+                    attribute = getattr(attribute, attribute_name)
+                except AttributeError:
+                    import pdb
+                    pdb.set_trace()
+
+            feature_dataframe.loc[index] = [sub_extended_feature_ID, attribute]
+
+        return feature_dataframe
+
     def __repr__(self):
         return utils.print_object(self)
 
@@ -665,3 +736,114 @@ class WormFeatures(object):
              same_posture and \
              same_path
                       
+
+class WormFeaturesDos(object):
+
+    """
+    This is the new features class. It will eventually replace the old class
+    when things are all ready.
+    """
+    def __init__(self, nw, processing_options=None):
+        """
+        
+        Parameters
+        ----------
+        nw: NormalizedWorm object
+        processing_options: movement_validation.features.feature_processing_options
+
+        """
+        if processing_options is None:
+            processing_options = \
+                            fpo.FeatureProcessingOptions()
+
+        # These are saved locally for reference by others when processing
+        self.video_info = nw.video_info
+        
+        self.options = processing_options
+        self.nw = nw
+        self.timer = utils.ElementTimer()    
+
+        #Old code
+        #------------------
+        #self.morphology = WormMorphology(self)
+        #self.locomotion = WormLocomotion(self)
+        #self.posture = \
+        #    WormPosture(self, self.locomotion.velocity.get_midbody_distance())
+        #self.path = WormPath(self)
+
+        f_specs = get_feature_processing_specs()
+
+        self.features = {}
+
+        modules = {'morphology_features':morphology_features,'locomotion_features':locomotion_features} 
+
+        self.feature_list = []
+        for spec in f_specs:
+            #Some of this logic should move to the specs themselves
+            module = modules[spec.module_name]
+            method_to_call = getattr(module,spec.class_name)
+            if len(spec.flags) == 0:
+                temp = method_to_call(self)
+            else:
+                temp = method_to_call(self,spec.flags)
+            self.feature_list.append(temp)
+            self.features[temp.name] = temp
+
+        #Wanted order, didn't feel like messsing with ordered_dict
+        #This will all likely change
+        #self.feature_list = [v for k,v in self.features.items()]
+
+        import pdb
+        pdb.set_trace()
+
+    def __getitem__(self,key):
+        #TODO: We should add on error checking here ...
+        return self.features[key]
+
+    def __repr__(self):
+        return utils.print_object(self)    
+        
+def get_feature_processing_specs():
+    
+    csv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                'feature_metadata',
+                                'features_list.csv')        
+    
+    f_specs = []    
+    
+    with open(csv_path) as feature_metadata_file:
+        feature_metadata = csv.DictReader(feature_metadata_file)
+        
+        for row in feature_metadata: 
+            f_specs.append(FeatureProcessingSpec(row))
+            
+    return f_specs
+
+
+class FeatureProcessingSpec(object):
+    
+    """
+    Information on how to get the feature
+    """
+    def __init__(self,d):
+        """
+        Parameters
+        ----------
+        d: dict
+            Data in a row of the features_list file
+        """
+        self.name = d['Feature Name']
+        self.module_name = d['Module']
+        self.class_name = d['Class Name']
+        
+        #We don't really need the dependencies if we lazy load ...
+        temp = d['Dependencies']
+        
+        #I'm not sure how I want to handle this yet
+        self.flags = d['Flags']
+        
+        
+        #TODO: Build module retrieval and code into here
+        
+    def __repr__(self):
+        return utils.print_object(self)       
